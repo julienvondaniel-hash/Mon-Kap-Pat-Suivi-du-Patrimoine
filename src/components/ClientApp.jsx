@@ -1,0 +1,779 @@
+import React, { useState, useMemo, useEffect } from "react";
+import {
+  LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip,
+  PieChart, Pie, Cell, AreaChart, Area, ReferenceLine, BarChart, Bar,
+} from "recharts";
+import {
+  Phone, Mail, TrendingUp, Home, Briefcase, AlertTriangle,
+  Calculator, ChevronRight, Shield, Droplet, Layers, Wallet,
+  Plus, Trash2, X, Pencil,
+} from "lucide-react";
+import { listAssets, upsertAsset, deleteAsset, saveSciSimulation } from "../lib/data";
+
+const CABINET = { name: "Seine Gestion Privée", tel: "0658803630", telDisplay: "06 58 80 36 30", email: "contact@seinegestionprivee.fr" };
+
+/* ------------------------------------------------------------------ */
+/*  Design tokens — univers family office                              */
+/* ------------------------------------------------------------------ */
+const C = {
+  ink: "#16201C", inkSoft: "#1F2C27", ivory: "#F3EFE6", ivorySoft: "#A9B0A6",
+  brass: "#C9A24B", brassSoft: "#7E6A38", line: "#2C3A33",
+  alert: "#C2553F", warn: "#C9A24B", positive: "#7FA67C",
+};
+const PIE_COLORS = [C.brass, "#7FA67C", "#5E7D8A", "#9B7B5B", "#6B6577", "#A88B6A"];
+
+
+const fmt = (n) =>
+  new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n || 0);
+const fmtPct = (n) => `${n > 0 ? "+" : ""}${n.toFixed(1)} %`;
+
+const CATEGORIES = {
+  mobilier: [
+    { key: "Actions", label: "Actions / ETF", liquid: true, market: true },
+    { key: "Obligations", label: "Obligations / fonds €", liquid: true, market: false },
+    { key: "Private equity", label: "Private equity / non coté", liquid: false, market: true },
+    { key: "Liquidités", label: "Liquidités / livrets", liquid: true, market: false },
+    { key: "Autre mobilier", label: "Autre (crypto, métaux…)", liquid: true, market: true },
+  ],
+  immobilier: [
+    { key: "Résidence principale", label: "Résidence principale", liquid: false, market: false },
+    { key: "Locatif", label: "Immobilier locatif", liquid: false, market: false },
+    { key: "SCPI", label: "SCPI / pierre-papier", liquid: false, market: false },
+  ],
+};
+const ALL_CATS = [...CATEGORIES.mobilier, ...CATEGORIES.immobilier];
+const catMeta = (key) => ALL_CATS.find((c) => c.key === key) || { liquid: true, market: false };
+
+
+const HISTORY = [
+  { m: "Juil", v: 1180000 }, { m: "Août", v: 1205000 }, { m: "Sept", v: 1190000 },
+  { m: "Oct", v: 1240000 }, { m: "Nov", v: 1288000 }, { m: "Déc", v: 1262000 },
+  { m: "Janv", v: 1310000 }, { m: "Févr", v: 1356000 }, { m: "Mars", v: 1342000 },
+  { m: "Avr", v: 1398000 }, { m: "Mai", v: 1425000 }, { m: "Juin", v: 1468000 },
+];
+
+/* ------------------------------------------------------------------ */
+/*  Moteur TRI — XIRR générique sur flux annuels                       */
+/* ------------------------------------------------------------------ */
+function irrFromAnnual(cashflows) {
+  // cashflows : tableau indexé par année (année 0 = aujourd'hui)
+  const v = cashflows.filter((c) => c !== 0);
+  if (v.length < 2) return null;
+  if (!cashflows.some((c) => c < 0) || !cashflows.some((c) => c > 0)) return null;
+  const npv = (r) => cashflows.reduce((s, c, t) => s + c / Math.pow(1 + r, t), 0);
+  const dnpv = (r) => cashflows.reduce((s, c, t) => s - (t * c) / Math.pow(1 + r, t + 1), 0);
+  let r = 0.08;
+  for (let i = 0; i < 80; i++) {
+    const d = dnpv(r); if (Math.abs(d) < 1e-10) break;
+    const n = r - npv(r) / d;
+    if (!isFinite(n)) { r = NaN; break; }
+    if (Math.abs(n - r) < 1e-8) return n;
+    r = n;
+  }
+  if (isFinite(r) && r > -0.9999) return r;
+  let lo = -0.99, hi = 5, flo = npv(lo);
+  for (let i = 0; i < 300; i++) {
+    const mid = (lo + hi) / 2, fm = npv(mid);
+    if (Math.abs(fm) < 0.5) return mid;
+    if (flo * fm < 0) hi = mid; else { lo = mid; flo = fm; }
+  }
+  return null;
+}
+
+function xirr(flows) {
+  const v = flows.filter((f) => f.date && !isNaN(f.amount) && f.amount !== 0)
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+  if (v.length < 2) return null;
+  if (!v.some((f) => f.amount < 0) || !v.some((f) => f.amount > 0)) return null;
+  const t0 = new Date(v[0].date).getTime();
+  const yr = (d) => (new Date(d).getTime() - t0) / (365 * 24 * 3600 * 1000);
+  const npv = (r) => v.reduce((s, f) => s + f.amount / Math.pow(1 + r, yr(f.date)), 0);
+  const dnpv = (r) => v.reduce((s, f) => s - (yr(f.date) * f.amount) / Math.pow(1 + r, yr(f.date) + 1), 0);
+  let r = 0.1;
+  for (let i = 0; i < 60; i++) {
+    const d = dnpv(r); if (Math.abs(d) < 1e-10) break;
+    const n = r - npv(r) / d;
+    if (!isFinite(n)) { r = NaN; break; }
+    if (Math.abs(n - r) < 1e-7) return n;
+    r = n;
+  }
+  if (isFinite(r) && r > -0.9999) return r;
+  let lo = -0.99, hi = 10, flo = npv(lo);
+  for (let i = 0; i < 200; i++) {
+    const mid = (lo + hi) / 2, fm = npv(mid);
+    if (Math.abs(fm) < 1) return mid;
+    if (flo * fm < 0) hi = mid; else { lo = mid; flo = fm; }
+  }
+  return null;
+}
+function moic(flows) {
+  const inv = flows.filter((f) => f.amount < 0).reduce((s, f) => s - f.amount, 0);
+  const ret = flows.filter((f) => f.amount > 0).reduce((s, f) => s + f.amount, 0);
+  return inv > 0 ? ret / inv : null;
+}
+function cumulative(flows) {
+  const v = [...flows].filter((f) => f.date).sort((a, b) => new Date(a.date) - new Date(b.date));
+  let acc = 0;
+  return v.map((f) => { acc += f.amount; return { date: f.date.slice(2), cumul: acc }; });
+}
+
+/* ------------------------------------------------------------------ */
+/*  MOTEUR SCI À L'IS — simulation année par année                     */
+/* ------------------------------------------------------------------ */
+/*
+  Hypothèses du modèle (paramétrables) :
+  - Acquisition d'un immeuble de rapport via SCI à l'IS.
+  - Financement par crédit amortissable (mensualités constantes).
+  - Loyers indexés, charges et vacance en % des loyers.
+  - IS : 15 % jusqu'à 42 500 € de résultat, 25 % au-delà (barème 2026).
+  - Amortissement : composant bâti (hors terrain) linéaire + mobilier.
+    -> réduit le résultat fiscal, donc l'IS, mais pas la trésorerie.
+  - Revente : plus-value IS = prix de vente - valeur nette comptable
+    (donc réintégration des amortissements pratiqués). Pas d'abattement
+    pour durée de détention à l'IS (différence majeure avec l'IR).
+  - TRI calculé sur les flux de trésorerie pour l'associé :
+    année 0 = apport ; années 1..N = cash-flow net après IS et crédit ;
+    année N = + produit net de revente après remboursement du capital
+    restant dû et IS sur plus-value.
+*/
+function simulateSCI(p) {
+  const {
+    prix, fraisActe, travaux, apport, // acquisition
+    tauxCredit, dureeCredit,          // financement
+    loyerAnnuel, chargesPct, vacancePct, indexation, // exploitation
+    partTerrain, dureeAmortBati,      // amortissement
+    appreciation, horizon, fraisVente // revente
+  } = p;
+
+  const coutTotal = prix + fraisActe + travaux;
+  const montantEmprunte = Math.max(0, coutTotal - apport);
+  const baseAmort = (prix * (1 - partTerrain / 100)) + travaux; // bâti + travaux amortissables
+  const amortAnnuel = dureeAmortBati > 0 ? baseAmort / dureeAmortBati : 0;
+
+  // Crédit : mensualité constante -> on raisonne en annuités
+  const i = tauxCredit / 100;
+  const annuite = montantEmprunte > 0 && i > 0
+    ? montantEmprunte * i / (1 - Math.pow(1 + i, -dureeCredit))
+    : (dureeCredit > 0 ? montantEmprunte / dureeCredit : 0);
+
+  let crd = montantEmprunte;            // capital restant dû
+  let vnc = coutTotal - (prix * partTerrain / 100); // valeur nette comptable amortissable (le terrain ne s'amortit pas mais reste à l'actif)
+  let valeurBien = prix + travaux;
+  const isOf = (res) => res <= 0 ? 0 : (res <= 42500 ? res * 0.15 : 42500 * 0.15 + (res - 42500) * 0.25);
+
+  const rows = [];
+  const cashflows = [-apport]; // année 0
+
+  for (let an = 1; an <= horizon; an++) {
+    const loyer = loyerAnnuel * Math.pow(1 + indexation / 100, an - 1);
+    const loyerEncaisse = loyer * (1 - vacancePct / 100);
+    const charges = loyer * (chargesPct / 100);
+
+    // Décomposition de l'annuité de crédit
+    const interets = crd * i;
+    const capitalRembourse = Math.min(crd, Math.max(0, annuite - interets));
+    crd = Math.max(0, crd - capitalRembourse);
+
+    // Résultat fiscal (IS) : loyers - charges - intérêts - amortissement
+    const amort = an <= dureeAmortBati ? amortAnnuel : 0;
+    const resultatFiscal = loyerEncaisse - charges - interets - amort;
+    const is = isOf(resultatFiscal);
+    vnc = Math.max(0, vnc - amort);
+
+    // Trésorerie : loyers encaissés - charges - annuité (capital+intérêts) - IS
+    const annuiteVersee = an <= dureeCredit ? (interets + capitalRembourse) : 0;
+    const cashflow = loyerEncaisse - charges - annuiteVersee - is;
+
+    valeurBien = (prix + travaux) * Math.pow(1 + appreciation / 100, an);
+
+    let revente = 0, isPV = 0, prixNet = 0, plusValue = 0;
+    if (an === horizon) {
+      prixNet = valeurBien * (1 - fraisVente / 100);
+      plusValue = prixNet - vnc;            // PV imposable à l'IS = prix net - VNC
+      isPV = isOf(plusValue);
+      revente = prixNet - crd - isPV;       // produit net pour l'associé après remboursement du CRD
+    }
+
+    cashflows.push(cashflow + revente);
+    rows.push({ an, loyerEncaisse, charges, interets, amort, resultatFiscal, is, cashflow, crd, valeurBien, revente, plusValue, isPV });
+  }
+
+  const tri = irrFromAnnual(cashflows);
+  const cumulCash = rows.reduce((s, r) => s + r.cashflow, 0);
+  const totalRevente = rows[rows.length - 1]?.revente || 0;
+  const gainTotal = cumulCash + totalRevente - apport;
+
+  return { rows, cashflows, tri, coutTotal, montantEmprunte, annuite, amortAnnuel, apport, cumulCash, totalRevente, gainTotal };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Analyse de risques                                                 */
+/* ------------------------------------------------------------------ */
+function analyse(assets) {
+  const gross = assets.reduce((s, a) => s + a.value, 0);
+  const net = assets.reduce((s, a) => s + a.value - (a.debt || 0), 0);
+  if (gross === 0) return { gross, net, items: [] };
+  const out = [];
+  const topLine = assets.reduce((m, a) => Math.max(m, a.value), 0) / gross;
+  if (topLine > 0.4)
+    out.push({ icon: Layers, level: "alert", title: "Concentration",
+      text: `Un seul actif pèse ${(topLine * 100).toFixed(0)} % du brut. Au-delà de 40 %, l'exposition à un événement isolé est forte.` });
+  const liquid = assets.filter((a) => catMeta(a.category).liquid).reduce((s, a) => s + a.value, 0) / gross;
+  if (liquid < 0.4)
+    out.push({ icon: Droplet, level: "warn", title: "Liquidité",
+      text: `Les actifs mobilisables rapidement représentent ${(liquid * 100).toFixed(0)} %. Une part illiquide élevée limite la réactivité.` });
+  const market = assets.filter((a) => catMeta(a.category).market).reduce((s, a) => s + a.value, 0) / gross;
+  if (market > 0.5)
+    out.push({ icon: TrendingUp, level: "warn", title: "Risque de marché",
+      text: `${(market * 100).toFixed(0)} % du patrimoine est exposé à la volatilité des marchés.` });
+  const debt = assets.reduce((s, a) => s + (a.debt || 0), 0);
+  const ltv = gross > 0 ? debt / gross : 0;
+  if (ltv > 0.5)
+    out.push({ icon: AlertTriangle, level: "alert", title: "Endettement",
+      text: `Le ratio dette / actifs atteint ${(ltv * 100).toFixed(0)} %. Un effet de levier élevé amplifie les variations de valeur nette.` });
+  out.push({ icon: Shield, level: "ok", title: "Diversification",
+    text: `Patrimoine réparti sur ${new Set(assets.map((a) => a.category)).size} catégories d'actifs.` });
+  return { gross, net, items: out };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Composants UI                                                      */
+/* ------------------------------------------------------------------ */
+const Eyebrow = ({ children }) => (
+  <div style={{ fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", color: C.brass, fontWeight: 600, marginBottom: 10 }}>{children}</div>
+);
+const Card = ({ children, style }) => (
+  <div style={{ background: C.inkSoft, border: `1px solid ${C.line}`, borderRadius: 18, padding: 22, ...style }}>{children}</div>
+);
+const input = { background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", color: C.ivory, fontSize: 14, width: "100%", boxSizing: "border-box" };
+
+/* ------------------------------------------------------------------ */
+/*  Écran Patrimoine                                                   */
+/* ------------------------------------------------------------------ */
+function Patrimoine({ assets, wide = false }) {
+  const { gross, net } = analyse(assets);
+  const debt = assets.reduce((s, a) => s + (a.debt || 0), 0);
+  const start = HISTORY[0].v;
+  const perf = ((net - start) / start) * 100;
+  const byCat = useMemo(() => {
+    const m = {};
+    assets.forEach((a) => { m[a.category] = (m[a.category] || 0) + a.value; });
+    return Object.entries(m).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [assets]);
+  const mob = assets.filter((a) => a.type === "mobilier").reduce((s, a) => s + a.value, 0);
+  const imm = assets.filter((a) => a.type === "immobilier").reduce((s, a) => s + a.value, 0);
+  const chart = HISTORY.map((h, i) => i === HISTORY.length - 1 ? { ...h, v: net } : h);
+
+  return (
+    <div style={{ display: wide ? "grid" : "flex", gridTemplateColumns: wide ? "1.4fr 1fr" : undefined, flexDirection: wide ? undefined : "column", gap: 18, alignItems: "start" }}>
+      <Card style={wide ? { gridColumn: "1 / 2" } : undefined}>
+        <Eyebrow>Valeur nette consolidée</Eyebrow>
+        <div style={{ fontSize: wide ? 44 : 38, fontWeight: 600, color: C.ivory, letterSpacing: "-0.02em", lineHeight: 1 }}>{fmt(net)}</div>
+        <div style={{ marginTop: 10, color: perf >= 0 ? C.positive : C.alert, fontSize: 14, fontWeight: 500 }}>
+          {fmtPct(perf)} <span style={{ color: C.ivorySoft }}>sur 12 mois</span>
+        </div>
+        <div style={{ display: "flex", gap: 18, marginTop: 12, fontSize: 12, color: C.ivorySoft }}>
+          <span>Brut {fmt(gross)}</span><span>·</span><span>Dette {fmt(debt)}</span>
+        </div>
+        <div style={{ height: wide ? 220 : 160, marginTop: 14, marginLeft: -10 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chart}>
+              <XAxis dataKey="m" tick={{ fill: C.ivorySoft, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis hide domain={["dataMin - 50000", "dataMax + 50000"]} />
+              <Tooltip contentStyle={{ background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10 }} formatter={(v) => [fmt(v), "Valeur nette"]} labelStyle={{ color: C.brass }} />
+              <Line type="monotone" dataKey="v" stroke={C.brass} strokeWidth={2.5} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+      <Card style={wide ? { gridColumn: "2 / 3" } : undefined}>
+        <Eyebrow>Répartition par catégorie</Eyebrow>
+        {byCat.length === 0 ? (
+          <div style={{ color: C.ivorySoft, fontSize: 13 }}>Aucun actif. Ajoutez-en depuis l'onglet Actifs.</div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+            <div style={{ width: 130, height: 130, flexShrink: 0 }}>
+              <ResponsiveContainer>
+                <PieChart>
+                  <Pie data={byCat} dataKey="value" innerRadius={42} outerRadius={62} paddingAngle={2} stroke="none">
+                    {byCat.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+              {byCat.map((a, i) => (
+                <div key={a.name} style={{ display: "flex", alignItems: "center", fontSize: 13 }}>
+                  <span style={{ width: 9, height: 9, borderRadius: 3, background: PIE_COLORS[i % PIE_COLORS.length], marginRight: 9 }} />
+                  <span style={{ color: C.ivory, flex: 1 }}>{a.name}</span>
+                  <span style={{ color: C.ivorySoft }}>{((a.value / gross) * 100).toFixed(0)} %</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Card>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, gridColumn: wide ? "1 / 3" : undefined }}>
+        <Card style={{ padding: 18 }}>
+          <Briefcase size={20} color={C.brass} />
+          <div style={{ fontSize: 12, color: C.ivorySoft, marginTop: 12 }}>Mobilier</div>
+          <div style={{ fontSize: 18, color: C.ivory, fontWeight: 600, marginTop: 2 }}>{fmt(mob)}</div>
+        </Card>
+        <Card style={{ padding: 18 }}>
+          <Home size={20} color={C.brass} />
+          <div style={{ fontSize: 12, color: C.ivorySoft, marginTop: 12 }}>Immobilier</div>
+          <div style={{ fontSize: 18, color: C.ivory, fontWeight: 600, marginTop: 2 }}>{fmt(imm)}</div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Écran Actifs                                                       */
+/* ------------------------------------------------------------------ */
+function Actifs({ assets, onSave, onRemove }) {
+  const [editing, setEditing] = useState(null);
+  const blank = () => ({ id: null, type: "mobilier", category: "Actions", label: "", value: 0, debt: 0 });
+  const save = async (a) => {
+    // Mappe le modèle UI vers les colonnes de la base (kind/value/debt).
+    await onSave({
+      id: a.id,
+      kind: a.type,
+      category: a.category,
+      label: a.label,
+      value: a.value,
+      debt: a.debt || 0,
+    });
+    setEditing(null);
+  };
+  const remove = (id) => onRemove(id);
+  const group = (type) => assets.filter((a) => a.type === type);
+
+  const Section = ({ type, title, Icon }) => {
+    const items = group(type);
+    const sum = items.reduce((s, a) => s + a.value - (a.debt || 0), 0);
+    return (
+      <Card>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <Icon size={18} color={C.brass} />
+          <span style={{ color: C.ivory, fontWeight: 600, fontSize: 15, flex: 1 }}>{title}</span>
+          <span style={{ color: C.brass, fontSize: 14, fontWeight: 600 }}>{fmt(sum)}</span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+          {items.length === 0 && <div style={{ color: C.ivorySoft, fontSize: 13, padding: "4px 0" }}>Aucun actif renseigné.</div>}
+          {items.map((a) => (
+            <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, background: C.ink, borderRadius: 12, padding: "12px 14px", border: `1px solid ${C.line}` }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: C.ivory, fontSize: 14, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.label || a.category}</div>
+                <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 2 }}>{a.category}{a.debt > 0 ? ` · dette ${fmt(a.debt)}` : ""}</div>
+              </div>
+              <div style={{ color: C.ivory, fontSize: 14, fontWeight: 600 }}>{fmt(a.value)}</div>
+              <button onClick={() => setEditing(a)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><Pencil size={15} color={C.ivorySoft} /></button>
+              <button onClick={() => remove(a.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><Trash2 size={15} color={C.alert} /></button>
+            </div>
+          ))}
+        </div>
+        <button onClick={() => setEditing({ ...blank(), type, category: CATEGORIES[type][0].key })}
+          style={{ marginTop: 12, width: "100%", background: "transparent", border: `1px dashed ${C.brassSoft}`, borderRadius: 10, padding: "11px", color: C.brass, fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          <Plus size={15} /> Ajouter
+        </button>
+      </Card>
+    );
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <Section type="mobilier" title="Actifs mobiliers" Icon={Wallet} />
+      <Section type="immobilier" title="Actifs immobiliers" Icon={Home} />
+      {editing && <AssetForm asset={editing} onSave={save} onCancel={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+function AssetForm({ asset, onSave, onCancel }) {
+  const [a, setA] = useState(asset);
+  const isImmo = a.type === "immobilier";
+  const set = (k, v) => setA((p) => ({ ...p, [k]: v }));
+  const setType = (t) => setA((p) => ({ ...p, type: t, category: CATEGORIES[t][0].key }));
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(8,12,10,0.7)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50 }} onClick={onCancel}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 430, background: C.inkSoft, borderRadius: "22px 22px 0 0", borderTop: `1px solid ${C.line}`, padding: 24, animation: "slideUp .25s ease" }}>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 18 }}>
+          <span style={{ color: C.ivory, fontSize: 17, fontWeight: 600, flex: 1 }}>{asset.label ? "Modifier l'actif" : "Nouvel actif"}</span>
+          <button onClick={onCancel} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={20} color={C.ivorySoft} /></button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            {["mobilier", "immobilier"].map((t) => (
+              <button key={t} onClick={() => setType(t)}
+                style={{ flex: 1, padding: "10px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 500, textTransform: "capitalize",
+                  background: a.type === t ? C.brass : "transparent", color: a.type === t ? C.ink : C.ivorySoft, border: `1px solid ${a.type === t ? C.brass : C.line}` }}>{t}</button>
+            ))}
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: C.ivorySoft, display: "block", marginBottom: 6 }}>Catégorie</label>
+            <select value={a.category} onChange={(e) => set("category", e.target.value)} style={{ ...input, colorScheme: "dark", cursor: "pointer" }}>
+              {CATEGORIES[a.type].map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: C.ivorySoft, display: "block", marginBottom: 6 }}>Libellé</label>
+            <input value={a.label} onChange={(e) => set("label", e.target.value)} placeholder="Ex : PEA Bourse Direct" style={input} />
+          </div>
+          <div style={{ display: "flex", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 12, color: C.ivorySoft, display: "block", marginBottom: 6 }}>Valeur (€)</label>
+              <input type="number" value={a.value || ""} onChange={(e) => set("value", parseFloat(e.target.value) || 0)} style={input} />
+            </div>
+            {isImmo && (
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 12, color: C.ivorySoft, display: "block", marginBottom: 6 }}>Crédit restant (€)</label>
+                <input type="number" value={a.debt || ""} onChange={(e) => set("debt", parseFloat(e.target.value) || 0)} style={input} />
+              </div>
+            )}
+          </div>
+          <button onClick={() => onSave(a)} disabled={!a.value}
+            style={{ marginTop: 4, width: "100%", background: a.value ? C.brass : C.line, color: a.value ? C.ink : C.ivorySoft, border: "none", borderRadius: 12, padding: "14px", fontSize: 15, fontWeight: 600, cursor: a.value ? "pointer" : "default" }}>Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Écran TRI — choix simple / SCI à l'IS                              */
+/* ------------------------------------------------------------------ */
+const SEED_FLOWS = [
+  { date: "2021-01-15", amount: -250000 },
+  { date: "2022-06-10", amount: -80000 },
+  { date: "2023-03-01", amount: 12000 },
+  { date: "2024-09-20", amount: 18000 },
+  { date: "2026-06-13", amount: 412000 },
+];
+
+function TRI() {
+  const [mode, setMode] = useState("simple");
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <div style={{ display: "flex", gap: 8, background: C.inkSoft, padding: 4, borderRadius: 12, border: `1px solid ${C.line}` }}>
+        {[["simple", "Flux libres"], ["sci", "Immeuble · SCI à l'IS"]].map(([k, lbl]) => (
+          <button key={k} onClick={() => setMode(k)}
+            style={{ flex: 1, padding: "10px", borderRadius: 9, cursor: "pointer", fontSize: 13, fontWeight: 600, border: "none",
+              background: mode === k ? C.brass : "transparent", color: mode === k ? C.ink : C.ivorySoft }}>{lbl}</button>
+        ))}
+      </div>
+      {mode === "simple" ? <TRISimple /> : <TRISci />}
+    </div>
+  );
+}
+
+function TRISimple() {
+  const [flows, setFlows] = useState(SEED_FLOWS);
+  const rate = useMemo(() => xirr(flows), [flows]);
+  const mult = useMemo(() => moic(flows), [flows]);
+  const cumul = useMemo(() => cumulative(flows), [flows]);
+  const invested = flows.filter((f) => f.amount < 0).reduce((s, f) => s - f.amount, 0);
+  const returned = flows.filter((f) => f.amount > 0).reduce((s, f) => s + f.amount, 0);
+  const gain = returned - invested;
+  const update = (i, k, v) => { const n = [...flows]; n[i] = { ...n[i], [k]: k === "amount" ? (parseFloat(v) || 0) : v }; setFlows(n); };
+  const remove = (i) => setFlows(flows.filter((_, j) => j !== i));
+  const Metric = ({ label, value, color }) => (
+    <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: C.ivorySoft }}>{label}</div><div style={{ color: color || C.ivory, fontWeight: 600, marginTop: 3, fontSize: 15 }}>{value}</div></div>
+  );
+  return (
+    <>
+      <Card style={{ textAlign: "center" }}>
+        <Eyebrow>Taux de rendement interne</Eyebrow>
+        <div style={{ fontSize: 50, fontWeight: 600, color: rate === null ? C.ivorySoft : C.brass, letterSpacing: "-0.02em", lineHeight: 1 }}>{rate === null ? "—" : `${(rate * 100).toFixed(1)} %`}</div>
+        <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 8 }}>annualisé · XIRR sur flux datés</div>
+        <div style={{ display: "flex", marginTop: 20, paddingTop: 18, borderTop: `1px solid ${C.line}`, gap: 8 }}>
+          <Metric label="Investi" value={fmt(invested)} />
+          <Metric label="Perçu" value={fmt(returned)} />
+          <Metric label="Gain net" value={fmt(gain)} color={gain >= 0 ? C.positive : C.alert} />
+          <Metric label="Multiple" value={mult === null ? "—" : `${mult.toFixed(2)}×`} />
+        </div>
+      </Card>
+      {cumul.length >= 2 && (
+        <Card>
+          <Eyebrow>Position cumulée</Eyebrow>
+          <div style={{ height: 150, marginLeft: -10 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={cumul}>
+                <defs><linearGradient id="cum" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.brass} stopOpacity={0.3} /><stop offset="100%" stopColor={C.brass} stopOpacity={0} /></linearGradient></defs>
+                <XAxis dataKey="date" tick={{ fill: C.ivorySoft, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis hide /><ReferenceLine y={0} stroke={C.line} />
+                <Tooltip contentStyle={{ background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10 }} formatter={(v) => [fmt(v), "Cumul"]} labelStyle={{ color: C.brass }} />
+                <Area type="monotone" dataKey="cumul" stroke={C.brass} strokeWidth={2} fill="url(#cum)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      )}
+      <Card>
+        <Eyebrow>Flux de trésorerie</Eyebrow>
+        <div style={{ fontSize: 12, color: C.ivorySoft, marginBottom: 14 }}>Négatif = sortie · Positif = entrée.</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {flows.map((f, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input type="date" value={f.date} onChange={(e) => update(i, "date", e.target.value)} style={{ ...input, flex: 1, fontSize: 13, padding: "10px 12px", colorScheme: "dark" }} />
+              <input type="number" value={f.amount} onChange={(e) => update(i, "amount", e.target.value)} style={{ ...input, width: 110, flex: "none", fontSize: 13, fontWeight: 600, textAlign: "right", color: f.amount < 0 ? C.alert : C.positive, padding: "10px 12px" }} />
+              <button onClick={() => remove(i)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}><Trash2 size={15} color={C.ivorySoft} /></button>
+            </div>
+          ))}
+        </div>
+        <button onClick={() => setFlows([...flows, { date: "2026-06-13", amount: 0 }])} style={{ marginTop: 14, width: "100%", background: "transparent", border: `1px dashed ${C.brassSoft}`, borderRadius: 10, padding: "11px", color: C.brass, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>+ Ajouter un flux</button>
+      </Card>
+    </>
+  );
+}
+
+/* ----- Module SCI à l'IS ----- */
+const SCI_DEFAULTS = {
+  prix: 800000, fraisActe: 64000, travaux: 60000, apport: 200000,
+  tauxCredit: 3.6, dureeCredit: 20,
+  loyerAnnuel: 64000, chargesPct: 22, vacancePct: 5, indexation: 1.5,
+  partTerrain: 15, dureeAmortBati: 33,
+  appreciation: 1.5, horizon: 15, fraisVente: 7,
+};
+
+function TRISci() {
+  const [p, setP] = useState(SCI_DEFAULTS);
+  const set = (k, v) => setP((s) => ({ ...s, [k]: parseFloat(v) || 0 }));
+  const sim = useMemo(() => simulateSCI(p), [p]);
+
+  const chartData = sim.rows.map((r) => ({
+    an: `A${r.an}`, cashflow: Math.round(r.cashflow), revente: Math.round(r.revente),
+  }));
+
+  const Field = ({ label, k, suffix }) => (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <label style={{ fontSize: 11, color: C.ivorySoft, display: "block", marginBottom: 5 }}>{label}</label>
+      <div style={{ position: "relative" }}>
+        <input type="number" value={p[k]} onChange={(e) => set(k, e.target.value)} style={{ ...input, fontSize: 13, padding: "9px 10px", paddingRight: suffix ? 30 : 10 }} />
+        {suffix && <span style={{ position: "absolute", right: 10, top: 9, color: C.ivorySoft, fontSize: 12 }}>{suffix}</span>}
+      </div>
+    </div>
+  );
+  const Group = ({ title, children }) => (
+    <Card style={{ padding: 18 }}>
+      <div style={{ fontSize: 12, color: C.brass, fontWeight: 600, letterSpacing: "0.05em", marginBottom: 12, textTransform: "uppercase" }}>{title}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{children}</div>
+    </Card>
+  );
+  const Metric = ({ label, value, color }) => (
+    <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: C.ivorySoft }}>{label}</div><div style={{ color: color || C.ivory, fontWeight: 600, marginTop: 3, fontSize: 14 }}>{value}</div></div>
+  );
+
+  return (
+    <>
+      <Card style={{ textAlign: "center" }}>
+        <Eyebrow>TRI net · part de l'associé</Eyebrow>
+        <div style={{ fontSize: 50, fontWeight: 600, color: sim.tri === null ? C.ivorySoft : C.brass, letterSpacing: "-0.02em", lineHeight: 1 }}>
+          {sim.tri === null ? "—" : `${(sim.tri * 100).toFixed(1)} %`}
+        </div>
+        <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 8 }}>
+          immeuble de rapport · SCI à l'IS · horizon {p.horizon} ans
+        </div>
+        <div style={{ display: "flex", marginTop: 20, paddingTop: 18, borderTop: `1px solid ${C.line}`, gap: 8 }}>
+          <Metric label="Apport" value={fmt(sim.apport)} />
+          <Metric label="Cash-flow cumulé" value={fmt(sim.cumulCash)} color={sim.cumulCash >= 0 ? C.positive : C.alert} />
+          <Metric label="Produit revente" value={fmt(sim.totalRevente)} />
+        </div>
+        <div style={{ display: "flex", marginTop: 14, gap: 8 }}>
+          <Metric label="Emprunt" value={fmt(sim.montantEmprunte)} />
+          <Metric label="Annuité crédit" value={fmt(sim.annuite)} />
+          <Metric label="Gain net total" value={fmt(sim.gainTotal)} color={sim.gainTotal >= 0 ? C.positive : C.alert} />
+        </div>
+      </Card>
+
+      <Card>
+        <Eyebrow>Trésorerie annuelle & revente</Eyebrow>
+        <div style={{ height: 170, marginLeft: -12 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData}>
+              <XAxis dataKey="an" tick={{ fill: C.ivorySoft, fontSize: 10 }} axisLine={false} tickLine={false} interval={p.horizon > 12 ? 1 : 0} />
+              <YAxis hide />
+              <ReferenceLine y={0} stroke={C.line} />
+              <Tooltip contentStyle={{ background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10 }} formatter={(v, n) => [fmt(v), n === "cashflow" ? "Cash-flow" : "Revente"]} labelStyle={{ color: C.brass }} cursor={{ fill: "rgba(201,162,75,0.08)" }} />
+              <Bar dataKey="cashflow" stackId="a" fill={C.positive} radius={[2, 2, 0, 0]} />
+              <Bar dataKey="revente" stackId="a" fill={C.brass} radius={[2, 2, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 12, color: C.ivorySoft, justifyContent: "center" }}>
+          <span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: C.positive, marginRight: 6 }} />Cash-flow annuel</span>
+          <span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: C.brass, marginRight: 6 }} />Produit de revente</span>
+        </div>
+      </Card>
+
+      <Group title="Acquisition">
+        <div style={{ display: "flex", gap: 10 }}><Field label="Prix du bien" k="prix" suffix="€" /><Field label="Frais d'acte" k="fraisActe" suffix="€" /></div>
+        <div style={{ display: "flex", gap: 10 }}><Field label="Travaux" k="travaux" suffix="€" /><Field label="Apport" k="apport" suffix="€" /></div>
+      </Group>
+      <Group title="Financement">
+        <div style={{ display: "flex", gap: 10 }}><Field label="Taux du crédit" k="tauxCredit" suffix="%" /><Field label="Durée" k="dureeCredit" suffix="ans" /></div>
+      </Group>
+      <Group title="Exploitation">
+        <div style={{ display: "flex", gap: 10 }}><Field label="Loyers / an" k="loyerAnnuel" suffix="€" /><Field label="Charges" k="chargesPct" suffix="%" /></div>
+        <div style={{ display: "flex", gap: 10 }}><Field label="Vacance" k="vacancePct" suffix="%" /><Field label="Indexation loyers" k="indexation" suffix="%" /></div>
+      </Group>
+      <Group title="Amortissement (IS)">
+        <div style={{ display: "flex", gap: 10 }}><Field label="Part terrain" k="partTerrain" suffix="%" /><Field label="Durée amort. bâti" k="dureeAmortBati" suffix="ans" /></div>
+      </Group>
+      <Group title="Revente">
+        <div style={{ display: "flex", gap: 10 }}><Field label="Appréciation / an" k="appreciation" suffix="%" /><Field label="Horizon" k="horizon" suffix="ans" /></div>
+        <div style={{ display: "flex", gap: 10 }}><Field label="Frais de vente" k="fraisVente" suffix="%" /><div style={{ flex: 1 }} /></div>
+      </Group>
+
+      <Card style={{ padding: 16 }}>
+        <div style={{ fontSize: 11.5, color: C.ivorySoft, lineHeight: 1.6 }}>
+          IS au barème 2026 (15 % jusqu'à 42 500 € de résultat, 25 % au-delà). À la revente, la plus-value imposable réintègre les amortissements pratiqués (prix net − valeur nette comptable), sans abattement pour durée de détention. Simulation informative à hypothèses constantes ; elle ne constitue pas un conseil en investissement ni une projection garantie. Pour une étude personnalisée, contactez {CABINET.name}.
+        </div>
+      </Card>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Écran Analyse                                                      */
+/* ------------------------------------------------------------------ */
+function Analyse({ assets }) {
+  const { gross, net, items } = useMemo(() => analyse(assets), [assets]);
+  const col = (l) => (l === "alert" ? C.alert : l === "warn" ? C.warn : C.positive);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <Card>
+        <Eyebrow>Lecture du patrimoine</Eyebrow>
+        <div style={{ fontSize: 13, color: C.ivorySoft, lineHeight: 1.6 }}>
+          Analyse informative fondée sur vos actifs (net {fmt(net)} · brut {fmt(gross)}). Elle ne constitue pas une recommandation personnalisée d'investissement.
+        </div>
+      </Card>
+      {items.length === 0 && <Card><div style={{ color: C.ivorySoft, fontSize: 13 }}>Renseignez vos actifs pour générer l'analyse.</div></Card>}
+      {items.map((it, i) => {
+        const Icon = it.icon, c = col(it.level);
+        return (
+          <Card key={i} style={{ borderLeft: `3px solid ${c}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <Icon size={18} color={c} />
+              <span style={{ color: C.ivory, fontWeight: 600, fontSize: 15 }}>{it.title}</span>
+              {it.level === "alert" && <AlertTriangle size={15} color={C.alert} style={{ marginLeft: "auto" }} />}
+            </div>
+            <div style={{ fontSize: 13, color: C.ivorySoft, lineHeight: 1.6 }}>{it.text}</div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Écran Conseiller                                                   */
+/* ------------------------------------------------------------------ */
+function Conseiller() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <Card style={{ textAlign: "center", padding: 28 }}>
+        <div style={{ width: 72, height: 72, borderRadius: "50%", background: C.brass, margin: "0 auto 16px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 600, color: C.ink }}>SGP</div>
+        <div style={{ color: C.ivory, fontSize: 19, fontWeight: 600 }}>{CABINET.name}</div>
+        <div style={{ color: C.brass, fontSize: 13, marginTop: 3 }}>Conseil en gestion de patrimoine</div>
+        <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 6 }}>CIF · membre CNCGP · ORIAS n° 21 00X XXX</div>
+        <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
+          <a href={`tel:${CABINET.tel}`} style={{ flex: 1, textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.brass, borderRadius: 12, padding: "14px", color: C.ink, fontWeight: 600, fontSize: 14 }}><Phone size={17} /> Appeler</a>
+          <a href={`mailto:${CABINET.email}`} style={{ flex: 1, textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "transparent", border: `1px solid ${C.brass}`, borderRadius: 12, padding: "14px", color: C.brass, fontWeight: 600, fontSize: 14 }}><Mail size={17} /> Écrire</a>
+        </div>
+        <div style={{ color: C.ivorySoft, fontSize: 13, marginTop: 16 }}>{CABINET.telDisplay}</div>
+      </Card>
+      <Card>
+        <Eyebrow>Prochain rendez-vous</Eyebrow>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ textAlign: "center", background: C.ink, borderRadius: 12, padding: "10px 14px", border: `1px solid ${C.line}` }}>
+            <div style={{ color: C.brass, fontSize: 22, fontWeight: 600, lineHeight: 1 }}>24</div>
+            <div style={{ color: C.ivorySoft, fontSize: 11, marginTop: 2 }}>JUIN</div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ color: C.ivory, fontSize: 14, fontWeight: 500 }}>Revue annuelle de patrimoine</div>
+            <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 2 }}>14 h 30 · visioconférence</div>
+          </div>
+          <ChevronRight size={18} color={C.ivorySoft} />
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Wrapper client : charge les actifs depuis Supabase et orchestre    */
+/*  les onglets. Remplace l'état en mémoire du prototype.              */
+/* ------------------------------------------------------------------ */
+export const CLIENT_TABS = [
+  { id: "patrimoine", label: "Patrimoine", icon: TrendingUp },
+  { id: "actifs", label: "Actifs", icon: Wallet },
+  { id: "tri", label: "TRI", icon: Calculator },
+  { id: "analyse", label: "Analyse", icon: Shield },
+  { id: "conseiller", label: "Conseiller", icon: Phone },
+];
+
+// La base renvoie {kind, value, debt...}. Les écrans attendent {type,...}.
+const fromDb = (row) => ({
+  id: row.id, type: row.kind, category: row.category,
+  label: row.label, value: Number(row.value), debt: Number(row.debt),
+});
+
+// `tab` et `setTab` sont fournis par App (navigation partagée avec le menu
+// latéral sur ordinateur). `isDesktop` masque la barre d'onglets du bas.
+export default function ClientApp({ tab = "patrimoine", setTab = () => {}, isDesktop = false }) {
+  const [assets, setAssets] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = async () => {
+    const { data, error } = await listAssets();
+    if (!error && data) setAssets(data.map(fromDb));
+    setLoading(false);
+  };
+  useEffect(() => { refresh(); }, []);
+
+  const handleSave = async (assetDb) => {
+    await upsertAsset(assetDb);
+    await refresh();
+  };
+  const handleRemove = async (id) => {
+    await deleteAsset(id);
+    await refresh();
+  };
+
+  // Sur ordinateur : contenu large, centré, sans barre d'onglets en bas.
+  const contentPad = isDesktop ? "32px 40px 40px" : "20px 18px 96px";
+  const contentMax = isDesktop ? 1100 : "none";
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+      <div style={{ flex: 1, padding: contentPad, overflowY: "auto" }}>
+        <div style={{ maxWidth: contentMax, margin: "0 auto" }}>
+          {loading && tab !== "tri" && tab !== "conseiller"
+            ? <div style={{ color: "#A9B0A6", fontSize: 13, padding: 8 }}>Chargement de votre patrimoine…</div>
+            : <>
+                {tab === "patrimoine" && <Patrimoine assets={assets} wide={isDesktop} />}
+                {tab === "actifs" && <Actifs assets={assets} onSave={handleSave} onRemove={handleRemove} />}
+                {tab === "tri" && <TRI />}
+                {tab === "analyse" && <Analyse assets={assets} />}
+                {tab === "conseiller" && <Conseiller />}
+              </>}
+        </div>
+      </div>
+      {!isDesktop && (
+        <div style={{ position: "sticky", bottom: 0, display: "flex", background: "#1F2C27", borderTop: "1px solid #2C3A33", paddingBottom: "env(safe-area-inset-bottom)" }}>
+          {CLIENT_TABS.map((t) => {
+            const Icon = t.icon, on = t.id === tab;
+            return (
+              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", padding: "12px 0 14px", display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+                <Icon size={19} color={on ? "#C9A24B" : "#A9B0A6"} strokeWidth={on ? 2.4 : 1.8} />
+                <span style={{ fontSize: 10, color: on ? "#C9A24B" : "#A9B0A6", fontWeight: on ? 600 : 400 }}>{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
