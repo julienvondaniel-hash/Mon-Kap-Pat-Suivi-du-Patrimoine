@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { listAssets, upsertAsset, deleteAsset, saveSciSimulation } from "../lib/data";
 
-const CABINET = { name: "Seine Gestion Privée", tel: "0658803630", telDisplay: "06 58 80 36 30", email: "contact@seinegestionprivee.fr" };
+const CABINET = { name: "Seine Gestion Privée", tel: "0658803630", telDisplay: "06 58 80 36 30", email: "j.daniel@hexa-patrimoine.com" };
 
 /* ------------------------------------------------------------------ */
 /*  Design tokens — univers family office                              */
@@ -677,7 +677,7 @@ function Conseiller() {
         <div style={{ width: 72, height: 72, borderRadius: "50%", background: C.brass, margin: "0 auto 16px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 600, color: C.ink }}>SGP</div>
         <div style={{ color: C.ivory, fontSize: 19, fontWeight: 600 }}>{CABINET.name}</div>
         <div style={{ color: C.brass, fontSize: 13, marginTop: 3 }}>Conseil en gestion de patrimoine</div>
-        <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 6 }}>CIF · membre CNCGP · ORIAS n° 21 00X XXX</div>
+        <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 6 }}>CIF · membre ANACOFI · ORIAS n° 26004342</div>
         <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
           <a href={`tel:${CABINET.tel}`} style={{ flex: 1, textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: C.brass, borderRadius: 12, padding: "14px", color: C.ink, fontWeight: 600, fontSize: 14 }}><Phone size={17} /> Appeler</a>
           <a href={`mailto:${CABINET.email}`} style={{ flex: 1, textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "transparent", border: `1px solid ${C.brass}`, borderRadius: 12, padding: "14px", color: C.brass, fontWeight: 600, fontSize: 14 }}><Mail size={17} /> Écrire</a>
