@@ -2,22 +2,27 @@ import React, { useState, useEffect, useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { ChevronRight, ChevronLeft, Users, AlertTriangle, Search } from "lucide-react";
 import { listClientsNetWorth, getClientAssets } from "../lib/data";
+import Hex from "./Hex.jsx";
+import { useTheme } from "../lib/theme.jsx";
 
-const C = {
-  ink: "#16201C", inkSoft: "#1F2C27", ivory: "#F3EFE6", ivorySoft: "#A9B0A6",
-  brass: "#C9A24B", line: "#2C3A33", alert: "#C2553F", warn: "#C9A24B", positive: "#7FA67C",
-};
-const PIE_COLORS = [C.brass, "#7FA67C", "#5E7D8A", "#9B7B5B", "#6B6577", "#A88B6A"];
 const fmt = (n) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n || 0);
 
-const Card = ({ children, style }) => (
-  <div style={{ background: C.inkSoft, border: `1px solid ${C.line}`, borderRadius: 18, padding: 22, ...style }}>{children}</div>
-);
-const Eyebrow = ({ children }) => (
-  <div style={{ fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", color: C.brass, fontWeight: 600, marginBottom: 10 }}>{children}</div>
-);
+function Card({ children, style }) {
+  const C = useTheme();
+  const shadow = C.mode === "light" ? "0 1px 3px rgba(27,43,75,.06)" : "none";
+  return <div style={{ background: C.inkSoft, border: `1px solid ${C.line}`, borderRadius: 18, padding: 22, boxShadow: shadow, ...style }}>{children}</div>;
+}
+function Eyebrow({ children }) {
+  const C = useTheme();
+  return (
+    <div style={{ fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", color: C.brass, fontWeight: 600, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}>
+      <Hex size={11} color={C.brass} />{children}
+    </div>
+  );
+}
 
 export default function BackOffice({ wide = false }) {
+  const C = useTheme();
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -88,6 +93,7 @@ export default function BackOffice({ wide = false }) {
 }
 
 function ClientDetail({ client, onBack }) {
+  const C = useTheme();
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -145,7 +151,7 @@ function ClientDetail({ client, onBack }) {
               <ResponsiveContainer>
                 <PieChart>
                   <Pie data={byCat} dataKey="value" innerRadius={38} outerRadius={58} paddingAngle={2} stroke="none">
-                    {byCat.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                    {byCat.map((_, i) => <Cell key={i} fill={C.pie[i % C.pie.length]} />)}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
@@ -153,7 +159,7 @@ function ClientDetail({ client, onBack }) {
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
               {byCat.map((a, i) => (
                 <div key={a.name} style={{ display: "flex", alignItems: "center", fontSize: 13 }}>
-                  <span style={{ width: 9, height: 9, borderRadius: 3, background: PIE_COLORS[i % PIE_COLORS.length], marginRight: 9 }} />
+                  <span style={{ width: 9, height: 9, borderRadius: 3, background: C.pie[i % C.pie.length], marginRight: 9 }} />
                   <span style={{ color: C.ivory, flex: 1 }}>{a.name}</span>
                   <span style={{ color: C.ivorySoft }}>{((a.value / gross) * 100).toFixed(0)} %</span>
                 </div>

@@ -6,21 +6,21 @@ import {
 import {
   Phone, Mail, TrendingUp, Home, Briefcase, AlertTriangle,
   Calculator, ChevronRight, Shield, Droplet, Layers, Wallet,
-  Plus, Trash2, X, Pencil,
+  Plus, Trash2, X, Pencil, Lock, PiggyBank,
 } from "lucide-react";
 import { listAssets, upsertAsset, deleteAsset, saveSciSimulation } from "../lib/data";
+import MesDonnees from "./MesDonnees.jsx";
+import Logo from "./Logo.jsx";
+import Hex from "./Hex.jsx";
+import { useTheme, SERIF } from "../lib/theme.jsx";
 
-const CABINET = { name: "Seine Gestion Privée", tel: "0658803630", telDisplay: "06 58 80 36 30", email: "j.daniel@hexa-patrimoine.com" };
+const CABINET = { name: "Hexa Patrimoine", tel: "0658803630", telDisplay: "06 58 80 36 30", email: "j.daniel@hexa-patrimoine.com" };
 
 /* ------------------------------------------------------------------ */
 /*  Design tokens — univers family office                              */
 /* ------------------------------------------------------------------ */
-const C = {
-  ink: "#16201C", inkSoft: "#1F2C27", ivory: "#F3EFE6", ivorySoft: "#A9B0A6",
-  brass: "#C9A24B", brassSoft: "#7E6A38", line: "#2C3A33",
-  alert: "#C2553F", warn: "#C9A24B", positive: "#7FA67C",
-};
-const PIE_COLORS = [C.brass, "#7FA67C", "#5E7D8A", "#9B7B5B", "#6B6577", "#A88B6A"];
+// Couleurs et PIE viennent désormais du thème (useTheme), par composant.
+const inputStyle = (C) => ({ background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", color: C.ivory, fontSize: 14, width: "100%", boxSizing: "border-box" });
 
 
 const fmt = (n) =>
@@ -45,12 +45,6 @@ const ALL_CATS = [...CATEGORIES.mobilier, ...CATEGORIES.immobilier];
 const catMeta = (key) => ALL_CATS.find((c) => c.key === key) || { liquid: true, market: false };
 
 
-const HISTORY = [
-  { m: "Juil", v: 1180000 }, { m: "Août", v: 1205000 }, { m: "Sept", v: 1190000 },
-  { m: "Oct", v: 1240000 }, { m: "Nov", v: 1288000 }, { m: "Déc", v: 1262000 },
-  { m: "Janv", v: 1310000 }, { m: "Févr", v: 1356000 }, { m: "Mars", v: 1342000 },
-  { m: "Avr", v: 1398000 }, { m: "Mai", v: 1425000 }, { m: "Juin", v: 1468000 },
-];
 
 /* ------------------------------------------------------------------ */
 /*  Moteur TRI — XIRR générique sur flux annuels                       */
@@ -239,22 +233,28 @@ function analyse(assets) {
 /* ------------------------------------------------------------------ */
 /*  Composants UI                                                      */
 /* ------------------------------------------------------------------ */
-const Eyebrow = ({ children }) => (
-  <div style={{ fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", color: C.brass, fontWeight: 600, marginBottom: 10 }}>{children}</div>
-);
-const Card = ({ children, style }) => (
-  <div style={{ background: C.inkSoft, border: `1px solid ${C.line}`, borderRadius: 18, padding: 22, ...style }}>{children}</div>
-);
-const input = { background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", color: C.ivory, fontSize: 14, width: "100%", boxSizing: "border-box" };
+function Eyebrow({ children }) {
+  const C = useTheme();
+  return (
+    <div style={{ fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", color: C.brass, fontWeight: 600, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 }}>
+      <Hex size={11} color={C.brass} />{children}
+    </div>
+  );
+}
+function Card({ children, style }) {
+  const C = useTheme();
+  const shadow = C.mode === "light" ? "0 1px 3px rgba(27,43,75,.06)" : "none";
+  return <div style={{ background: C.inkSoft, border: `1px solid ${C.line}`, borderRadius: 18, padding: 22, boxShadow: shadow, ...style }}>{children}</div>;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Écran Patrimoine                                                   */
 /* ------------------------------------------------------------------ */
-function Patrimoine({ assets, wide = false }) {
+function Patrimoine({ assets, wide = false, history = [] }) {
+  const C = useTheme();
+  const input = inputStyle(C);
   const { gross, net } = analyse(assets);
   const debt = assets.reduce((s, a) => s + (a.debt || 0), 0);
-  const start = HISTORY[0].v;
-  const perf = ((net - start) / start) * 100;
   const byCat = useMemo(() => {
     const m = {};
     assets.forEach((a) => { m[a.category] = (m[a.category] || 0) + a.value; });
@@ -262,16 +262,34 @@ function Patrimoine({ assets, wide = false }) {
   }, [assets]);
   const mob = assets.filter((a) => a.type === "mobilier").reduce((s, a) => s + a.value, 0);
   const imm = assets.filter((a) => a.type === "immobilier").reduce((s, a) => s + a.value, 0);
-  const chart = HISTORY.map((h, i) => i === HISTORY.length - 1 ? { ...h, v: net } : h);
+
+  // Historique réel uniquement. Aucune donnée passée inventée.
+  // - Si on a un historique (table asset_valuations), on l'affiche + le point actuel.
+  // - Sinon, un seul point : la valeur d'aujourd'hui (pas de courbe fictive).
+  const moisCourt = new Date().toLocaleDateString("fr-FR", { month: "short" });
+  const chart = history.length > 0
+    ? [...history, { m: moisCourt, v: net }]
+    : [{ m: moisCourt, v: net }];
+
+  // Performance calculée seulement si on dispose d'un point de départ réel.
+  const perf = history.length > 0 && history[0].v
+    ? ((net - history[0].v) / history[0].v) * 100
+    : null;
 
   return (
     <div style={{ display: wide ? "grid" : "flex", gridTemplateColumns: wide ? "1.4fr 1fr" : undefined, flexDirection: wide ? undefined : "column", gap: 18, alignItems: "start" }}>
       <Card style={wide ? { gridColumn: "1 / 2" } : undefined}>
         <Eyebrow>Valeur nette consolidée</Eyebrow>
-        <div style={{ fontSize: wide ? 44 : 38, fontWeight: 600, color: C.ivory, letterSpacing: "-0.02em", lineHeight: 1 }}>{fmt(net)}</div>
-        <div style={{ marginTop: 10, color: perf >= 0 ? C.positive : C.alert, fontSize: 14, fontWeight: 500 }}>
-          {fmtPct(perf)} <span style={{ color: C.ivorySoft }}>sur 12 mois</span>
-        </div>
+        <div style={{ fontSize: wide ? 46 : 38, fontFamily: SERIF, fontWeight: 500, color: C.ivory, letterSpacing: "-0.5px", lineHeight: 1 }}>{fmt(net)}</div>
+        {perf !== null ? (
+          <div style={{ marginTop: 10, color: perf >= 0 ? C.positive : C.alert, fontSize: 14, fontWeight: 500 }}>
+            {fmtPct(perf)} <span style={{ color: C.ivorySoft }}>depuis le premier relevé</span>
+          </div>
+        ) : (
+          <div style={{ marginTop: 10, color: C.ivorySoft, fontSize: 13 }}>
+            Historique en cours de constitution
+          </div>
+        )}
         <div style={{ display: "flex", gap: 18, marginTop: 12, fontSize: 12, color: C.ivorySoft }}>
           <span>Brut {fmt(gross)}</span><span>·</span><span>Dette {fmt(debt)}</span>
         </div>
@@ -281,7 +299,7 @@ function Patrimoine({ assets, wide = false }) {
               <XAxis dataKey="m" tick={{ fill: C.ivorySoft, fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis hide domain={["dataMin - 50000", "dataMax + 50000"]} />
               <Tooltip contentStyle={{ background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10 }} formatter={(v) => [fmt(v), "Valeur nette"]} labelStyle={{ color: C.brass }} />
-              <Line type="monotone" dataKey="v" stroke={C.brass} strokeWidth={2.5} dot={false} />
+              <Line type="monotone" dataKey="v" stroke={C.brass} strokeWidth={2.5} dot={{ r: 4, fill: C.brass }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -296,7 +314,7 @@ function Patrimoine({ assets, wide = false }) {
               <ResponsiveContainer>
                 <PieChart>
                   <Pie data={byCat} dataKey="value" innerRadius={42} outerRadius={62} paddingAngle={2} stroke="none">
-                    {byCat.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                    {byCat.map((_, i) => <Cell key={i} fill={C.pie[i % C.pie.length]} />)}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
@@ -304,7 +322,7 @@ function Patrimoine({ assets, wide = false }) {
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
               {byCat.map((a, i) => (
                 <div key={a.name} style={{ display: "flex", alignItems: "center", fontSize: 13 }}>
-                  <span style={{ width: 9, height: 9, borderRadius: 3, background: PIE_COLORS[i % PIE_COLORS.length], marginRight: 9 }} />
+                  <span style={{ width: 9, height: 9, borderRadius: 3, background: C.pie[i % C.pie.length], marginRight: 9 }} />
                   <span style={{ color: C.ivory, flex: 1 }}>{a.name}</span>
                   <span style={{ color: C.ivorySoft }}>{((a.value / gross) * 100).toFixed(0)} %</span>
                 </div>
@@ -333,6 +351,8 @@ function Patrimoine({ assets, wide = false }) {
 /*  Écran Actifs                                                       */
 /* ------------------------------------------------------------------ */
 function Actifs({ assets, onSave, onRemove }) {
+  const C = useTheme();
+  const input = inputStyle(C);
   const [editing, setEditing] = useState(null);
   const blank = () => ({ id: null, type: "mobilier", category: "Actions", label: "", value: 0, debt: 0 });
   const save = async (a) => {
@@ -392,6 +412,8 @@ function Actifs({ assets, onSave, onRemove }) {
 }
 
 function AssetForm({ asset, onSave, onCancel }) {
+  const C = useTheme();
+  const input = inputStyle(C);
   const [a, setA] = useState(asset);
   const isImmo = a.type === "immobilier";
   const set = (k, v) => setA((p) => ({ ...p, [k]: v }));
@@ -453,6 +475,7 @@ const SEED_FLOWS = [
 ];
 
 function TRI() {
+  const C = useTheme();
   const [mode, setMode] = useState("simple");
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -469,6 +492,8 @@ function TRI() {
 }
 
 function TRISimple() {
+  const C = useTheme();
+  const input = inputStyle(C);
   const [flows, setFlows] = useState(SEED_FLOWS);
   const rate = useMemo(() => xirr(flows), [flows]);
   const mult = useMemo(() => moic(flows), [flows]);
@@ -485,7 +510,7 @@ function TRISimple() {
     <>
       <Card style={{ textAlign: "center" }}>
         <Eyebrow>Taux de rendement interne</Eyebrow>
-        <div style={{ fontSize: 50, fontWeight: 600, color: rate === null ? C.ivorySoft : C.brass, letterSpacing: "-0.02em", lineHeight: 1 }}>{rate === null ? "—" : `${(rate * 100).toFixed(1)} %`}</div>
+        <div style={{ fontSize: 50, fontFamily: SERIF, fontWeight: 500, color: rate === null ? C.ivorySoft : C.brass, letterSpacing: "-0.5px", lineHeight: 1 }}>{rate === null ? "—" : `${(rate * 100).toFixed(1)} %`}</div>
         <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 8 }}>annualisé · XIRR sur flux datés</div>
         <div style={{ display: "flex", marginTop: 20, paddingTop: 18, borderTop: `1px solid ${C.line}`, gap: 8 }}>
           <Metric label="Investi" value={fmt(invested)} />
@@ -537,7 +562,40 @@ const SCI_DEFAULTS = {
   appreciation: 1.5, horizon: 15, fraisVente: 7,
 };
 
+/* Sous-composants du module SCI, définis au niveau module pour préserver le
+   focus des champs (sinon perte de focus à chaque frappe). */
+function SciField({ label, value, onChange, suffix }) {
+  const C = useTheme();
+  const input = inputStyle(C);
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <label style={{ fontSize: 11, color: C.ivorySoft, display: "block", marginBottom: 5 }}>{label}</label>
+      <div style={{ position: "relative" }}>
+        <input type="number" value={value} onChange={(e) => onChange(e.target.value)} style={{ ...input, fontSize: 13, padding: "9px 10px", paddingRight: suffix ? 30 : 10 }} />
+        {suffix && <span style={{ position: "absolute", right: 10, top: 9, color: C.ivorySoft, fontSize: 12 }}>{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+function SciGroup({ title, children }) {
+  const C = useTheme();
+  return (
+    <Card style={{ padding: 18 }}>
+      <div style={{ fontSize: 12, color: C.brass, fontWeight: 600, letterSpacing: "0.05em", marginBottom: 12, textTransform: "uppercase" }}>{title}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{children}</div>
+    </Card>
+  );
+}
+function SciMetric({ label, value, color }) {
+  const C = useTheme();
+  return (
+    <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: C.ivorySoft }}>{label}</div><div style={{ color: color || C.ivory, fontWeight: 600, marginTop: 3, fontSize: 14 }}>{value}</div></div>
+  );
+}
+
 function TRISci() {
+  const C = useTheme();
+  const input = inputStyle(C);
   const [p, setP] = useState(SCI_DEFAULTS);
   const set = (k, v) => setP((s) => ({ ...s, [k]: parseFloat(v) || 0 }));
   const sim = useMemo(() => simulateSCI(p), [p]);
@@ -546,44 +604,25 @@ function TRISci() {
     an: `A${r.an}`, cashflow: Math.round(r.cashflow), revente: Math.round(r.revente),
   }));
 
-  const Field = ({ label, k, suffix }) => (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <label style={{ fontSize: 11, color: C.ivorySoft, display: "block", marginBottom: 5 }}>{label}</label>
-      <div style={{ position: "relative" }}>
-        <input type="number" value={p[k]} onChange={(e) => set(k, e.target.value)} style={{ ...input, fontSize: 13, padding: "9px 10px", paddingRight: suffix ? 30 : 10 }} />
-        {suffix && <span style={{ position: "absolute", right: 10, top: 9, color: C.ivorySoft, fontSize: 12 }}>{suffix}</span>}
-      </div>
-    </div>
-  );
-  const Group = ({ title, children }) => (
-    <Card style={{ padding: 18 }}>
-      <div style={{ fontSize: 12, color: C.brass, fontWeight: 600, letterSpacing: "0.05em", marginBottom: 12, textTransform: "uppercase" }}>{title}</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{children}</div>
-    </Card>
-  );
-  const Metric = ({ label, value, color }) => (
-    <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: C.ivorySoft }}>{label}</div><div style={{ color: color || C.ivory, fontWeight: 600, marginTop: 3, fontSize: 14 }}>{value}</div></div>
-  );
-
   return (
     <>
       <Card style={{ textAlign: "center" }}>
         <Eyebrow>TRI net · part de l'associé</Eyebrow>
-        <div style={{ fontSize: 50, fontWeight: 600, color: sim.tri === null ? C.ivorySoft : C.brass, letterSpacing: "-0.02em", lineHeight: 1 }}>
+        <div style={{ fontSize: 50, fontFamily: SERIF, fontWeight: 500, color: sim.tri === null ? C.ivorySoft : C.brass, letterSpacing: "-0.5px", lineHeight: 1 }}>
           {sim.tri === null ? "—" : `${(sim.tri * 100).toFixed(1)} %`}
         </div>
         <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 8 }}>
           immeuble de rapport · SCI à l'IS · horizon {p.horizon} ans
         </div>
         <div style={{ display: "flex", marginTop: 20, paddingTop: 18, borderTop: `1px solid ${C.line}`, gap: 8 }}>
-          <Metric label="Apport" value={fmt(sim.apport)} />
-          <Metric label="Cash-flow cumulé" value={fmt(sim.cumulCash)} color={sim.cumulCash >= 0 ? C.positive : C.alert} />
-          <Metric label="Produit revente" value={fmt(sim.totalRevente)} />
+          <SciMetric label="Apport" value={fmt(sim.apport)} />
+          <SciMetric label="Cash-flow cumulé" value={fmt(sim.cumulCash)} color={sim.cumulCash >= 0 ? C.positive : C.alert} />
+          <SciMetric label="Produit revente" value={fmt(sim.totalRevente)} />
         </div>
         <div style={{ display: "flex", marginTop: 14, gap: 8 }}>
-          <Metric label="Emprunt" value={fmt(sim.montantEmprunte)} />
-          <Metric label="Annuité crédit" value={fmt(sim.annuite)} />
-          <Metric label="Gain net total" value={fmt(sim.gainTotal)} color={sim.gainTotal >= 0 ? C.positive : C.alert} />
+          <SciMetric label="Emprunt" value={fmt(sim.montantEmprunte)} />
+          <SciMetric label="Annuité crédit" value={fmt(sim.annuite)} />
+          <SciMetric label="Gain net total" value={fmt(sim.gainTotal)} color={sim.gainTotal >= 0 ? C.positive : C.alert} />
         </div>
       </Card>
 
@@ -595,7 +634,7 @@ function TRISci() {
               <XAxis dataKey="an" tick={{ fill: C.ivorySoft, fontSize: 10 }} axisLine={false} tickLine={false} interval={p.horizon > 12 ? 1 : 0} />
               <YAxis hide />
               <ReferenceLine y={0} stroke={C.line} />
-              <Tooltip contentStyle={{ background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10 }} formatter={(v, n) => [fmt(v), n === "cashflow" ? "Cash-flow" : "Revente"]} labelStyle={{ color: C.brass }} cursor={{ fill: "rgba(201,162,75,0.08)" }} />
+              <Tooltip contentStyle={{ background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10 }} formatter={(v, n) => [fmt(v), n === "cashflow" ? "Cash-flow" : "Revente"]} labelStyle={{ color: C.brass }} cursor={{ fill: "rgba(62,140,156,0.08)" }} />
               <Bar dataKey="cashflow" stackId="a" fill={C.positive} radius={[2, 2, 0, 0]} />
               <Bar dataKey="revente" stackId="a" fill={C.brass} radius={[2, 2, 0, 0]} />
             </BarChart>
@@ -607,24 +646,24 @@ function TRISci() {
         </div>
       </Card>
 
-      <Group title="Acquisition">
-        <div style={{ display: "flex", gap: 10 }}><Field label="Prix du bien" k="prix" suffix="€" /><Field label="Frais d'acte" k="fraisActe" suffix="€" /></div>
-        <div style={{ display: "flex", gap: 10 }}><Field label="Travaux" k="travaux" suffix="€" /><Field label="Apport" k="apport" suffix="€" /></div>
-      </Group>
-      <Group title="Financement">
-        <div style={{ display: "flex", gap: 10 }}><Field label="Taux du crédit" k="tauxCredit" suffix="%" /><Field label="Durée" k="dureeCredit" suffix="ans" /></div>
-      </Group>
-      <Group title="Exploitation">
-        <div style={{ display: "flex", gap: 10 }}><Field label="Loyers / an" k="loyerAnnuel" suffix="€" /><Field label="Charges" k="chargesPct" suffix="%" /></div>
-        <div style={{ display: "flex", gap: 10 }}><Field label="Vacance" k="vacancePct" suffix="%" /><Field label="Indexation loyers" k="indexation" suffix="%" /></div>
-      </Group>
-      <Group title="Amortissement (IS)">
-        <div style={{ display: "flex", gap: 10 }}><Field label="Part terrain" k="partTerrain" suffix="%" /><Field label="Durée amort. bâti" k="dureeAmortBati" suffix="ans" /></div>
-      </Group>
-      <Group title="Revente">
-        <div style={{ display: "flex", gap: 10 }}><Field label="Appréciation / an" k="appreciation" suffix="%" /><Field label="Horizon" k="horizon" suffix="ans" /></div>
-        <div style={{ display: "flex", gap: 10 }}><Field label="Frais de vente" k="fraisVente" suffix="%" /><div style={{ flex: 1 }} /></div>
-      </Group>
+      <SciGroup title="Acquisition">
+        <div style={{ display: "flex", gap: 10 }}><SciField label="Prix du bien" value={p.prix} onChange={(v) => set("prix", v)} suffix="€" /><SciField label="Frais d'acte" value={p.fraisActe} onChange={(v) => set("fraisActe", v)} suffix="€" /></div>
+        <div style={{ display: "flex", gap: 10 }}><SciField label="Travaux" value={p.travaux} onChange={(v) => set("travaux", v)} suffix="€" /><SciField label="Apport" value={p.apport} onChange={(v) => set("apport", v)} suffix="€" /></div>
+      </SciGroup>
+      <SciGroup title="Financement">
+        <div style={{ display: "flex", gap: 10 }}><SciField label="Taux du crédit" value={p.tauxCredit} onChange={(v) => set("tauxCredit", v)} suffix="%" /><SciField label="Durée" value={p.dureeCredit} onChange={(v) => set("dureeCredit", v)} suffix="ans" /></div>
+      </SciGroup>
+      <SciGroup title="Exploitation">
+        <div style={{ display: "flex", gap: 10 }}><SciField label="Loyers / an" value={p.loyerAnnuel} onChange={(v) => set("loyerAnnuel", v)} suffix="€" /><SciField label="Charges" value={p.chargesPct} onChange={(v) => set("chargesPct", v)} suffix="%" /></div>
+        <div style={{ display: "flex", gap: 10 }}><SciField label="Vacance" value={p.vacancePct} onChange={(v) => set("vacancePct", v)} suffix="%" /><SciField label="Indexation loyers" value={p.indexation} onChange={(v) => set("indexation", v)} suffix="%" /></div>
+      </SciGroup>
+      <SciGroup title="Amortissement (IS)">
+        <div style={{ display: "flex", gap: 10 }}><SciField label="Part terrain" value={p.partTerrain} onChange={(v) => set("partTerrain", v)} suffix="%" /><SciField label="Durée amort. bâti" value={p.dureeAmortBati} onChange={(v) => set("dureeAmortBati", v)} suffix="ans" /></div>
+      </SciGroup>
+      <SciGroup title="Revente">
+        <div style={{ display: "flex", gap: 10 }}><SciField label="Appréciation / an" value={p.appreciation} onChange={(v) => set("appreciation", v)} suffix="%" /><SciField label="Horizon" value={p.horizon} onChange={(v) => set("horizon", v)} suffix="ans" /></div>
+        <div style={{ display: "flex", gap: 10 }}><SciField label="Frais de vente" value={p.fraisVente} onChange={(v) => set("fraisVente", v)} suffix="%" /><div style={{ flex: 1 }} /></div>
+      </SciGroup>
 
       <Card style={{ padding: 16 }}>
         <div style={{ fontSize: 11.5, color: C.ivorySoft, lineHeight: 1.6 }}>
@@ -639,6 +678,8 @@ function TRISci() {
 /*  Écran Analyse                                                      */
 /* ------------------------------------------------------------------ */
 function Analyse({ assets }) {
+  const C = useTheme();
+  const input = inputStyle(C);
   const { gross, net, items } = useMemo(() => analyse(assets), [assets]);
   const col = (l) => (l === "alert" ? C.alert : l === "warn" ? C.warn : C.positive);
   return (
@@ -671,10 +712,12 @@ function Analyse({ assets }) {
 /*  Écran Conseiller                                                   */
 /* ------------------------------------------------------------------ */
 function Conseiller() {
+  const C = useTheme();
+  const input = inputStyle(C);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <Card style={{ textAlign: "center", padding: 28 }}>
-        <div style={{ width: 72, height: 72, borderRadius: "50%", background: C.brass, margin: "0 auto 16px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 600, color: C.ink }}>SGP</div>
+        <div style={{ margin: "0 auto 16px", display: "inline-flex" }}><Logo size={72} radius={16} /></div>
         <div style={{ color: C.ivory, fontSize: 19, fontWeight: 600 }}>{CABINET.name}</div>
         <div style={{ color: C.brass, fontSize: 13, marginTop: 3 }}>Conseil en gestion de patrimoine</div>
         <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 6 }}>CIF · membre ANACOFI · ORIAS n° 26004342</div>
@@ -703,15 +746,102 @@ function Conseiller() {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Module Budget — capacité d'épargne                                 */
+/*  Champ défini au niveau module pour préserver le focus à la frappe. */
+/* ------------------------------------------------------------------ */
+function BudgetRow({ label, value, onChange, color }) {
+  const C = useTheme();
+  const input = inputStyle(C);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <span style={{ flex: 1, fontSize: 13, color: C.ivory }}>{label}</span>
+      <div style={{ position: "relative", width: 130 }}>
+        <input type="number" value={value || ""} onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+          style={{ ...input, fontSize: 13, padding: "9px 26px 9px 10px", textAlign: "right", color: color || C.ivory, fontWeight: 600 }} />
+        <span style={{ position: "absolute", right: 10, top: 9, color: C.ivorySoft, fontSize: 12 }}>€</span>
+      </div>
+    </div>
+  );
+}
+
+function Budget() {
+  const C = useTheme();
+  const input = inputStyle(C);
+  const [revenus, setRevenus] = useState({ salaires: 4200, foncier: 0, autres: 0 });
+  const [depenses, setDepenses] = useState({ logement: 1200, credits: 650, vie: 1100, loisirs: 400, autres: 300 });
+
+  const totalRev = Object.values(revenus).reduce((s, v) => s + v, 0);
+  const totalDep = Object.values(depenses).reduce((s, v) => s + v, 0);
+  const epargne = totalRev - totalDep;
+  const taux = totalRev > 0 ? (epargne / totalRev) * 100 : 0;
+
+  const setR = (k, v) => setRevenus((s) => ({ ...s, [k]: v }));
+  const setD = (k, v) => setDepenses((s) => ({ ...s, [k]: v }));
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <Card style={{ textAlign: "center" }}>
+        <Eyebrow>Capacité d'épargne mensuelle</Eyebrow>
+        <div style={{ fontSize: 46, fontFamily: SERIF, fontWeight: 500, color: epargne >= 0 ? C.positive : C.alert, letterSpacing: "-0.5px", lineHeight: 1 }}>
+          {fmt(epargne)}
+        </div>
+        <div style={{ color: C.ivorySoft, fontSize: 13, marginTop: 8 }}>
+          {epargne >= 0 ? `soit ${taux.toFixed(0)} % des revenus · ${fmt(epargne * 12)} par an` : "budget déséquilibré"}
+        </div>
+        <div style={{ display: "flex", marginTop: 20, paddingTop: 18, borderTop: `1px solid ${C.line}`, gap: 8 }}>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: C.ivorySoft }}>Revenus</div><div style={{ color: C.ivory, fontWeight: 600, marginTop: 3 }}>{fmt(totalRev)}</div></div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: C.ivorySoft }}>Dépenses</div><div style={{ color: C.ivory, fontWeight: 600, marginTop: 3 }}>{fmt(totalDep)}</div></div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: C.ivorySoft }}>Taux d'épargne</div><div style={{ color: epargne >= 0 ? C.positive : C.alert, fontWeight: 600, marginTop: 3 }}>{taux.toFixed(0)} %</div></div>
+        </div>
+      </Card>
+
+      <Card>
+        <Eyebrow>Revenus mensuels</Eyebrow>
+        <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+          <BudgetRow label="Salaires / pensions" value={revenus.salaires} onChange={(v) => setR("salaires", v)} color={C.positive} />
+          <BudgetRow label="Revenus fonciers" value={revenus.foncier} onChange={(v) => setR("foncier", v)} color={C.positive} />
+          <BudgetRow label="Autres revenus" value={revenus.autres} onChange={(v) => setR("autres", v)} color={C.positive} />
+        </div>
+      </Card>
+
+      <Card>
+        <Eyebrow>Dépenses mensuelles</Eyebrow>
+        <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+          <BudgetRow label="Logement (loyer, charges)" value={depenses.logement} onChange={(v) => setD("logement", v)} color={C.alert} />
+          <BudgetRow label="Crédits & emprunts" value={depenses.credits} onChange={(v) => setD("credits", v)} color={C.alert} />
+          <BudgetRow label="Vie courante (alimentation…)" value={depenses.vie} onChange={(v) => setD("vie", v)} color={C.alert} />
+          <BudgetRow label="Loisirs & sorties" value={depenses.loisirs} onChange={(v) => setD("loisirs", v)} color={C.alert} />
+          <BudgetRow label="Autres dépenses" value={depenses.autres} onChange={(v) => setD("autres", v)} color={C.alert} />
+        </div>
+      </Card>
+
+      {epargne > 0 && (
+        <Card style={{ borderLeft: `3px solid ${C.positive}` }}>
+          <div style={{ fontSize: 13, color: C.ivorySoft, lineHeight: 1.6 }}>
+            Avec {fmt(epargne)} d'épargne mensuelle, vous pouvez vous constituer {fmt(epargne * 12)} par an. Cette capacité peut servir de base à un effort d'investissement régulier, à arbitrer avec votre conseiller selon vos objectifs.
+          </div>
+        </Card>
+      )}
+
+      <div style={{ fontSize: 11, color: C.ivorySoft, lineHeight: 1.6, padding: "0 4px" }}>
+        Estimation indicative à partir des montants que vous saisissez. Elle ne constitue pas un conseil budgétaire ou en investissement personnalisé.
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Wrapper client : charge les actifs depuis Supabase et orchestre    */
 /*  les onglets. Remplace l'état en mémoire du prototype.              */
 /* ------------------------------------------------------------------ */
 export const CLIENT_TABS = [
   { id: "patrimoine", label: "Patrimoine", icon: TrendingUp },
   { id: "actifs", label: "Actifs", icon: Wallet },
+  { id: "budget", label: "Budget", icon: PiggyBank },
   { id: "tri", label: "TRI", icon: Calculator },
   { id: "analyse", label: "Analyse", icon: Shield },
   { id: "conseiller", label: "Conseiller", icon: Phone },
+  { id: "donnees", label: "Données", icon: Lock },
 ];
 
 // La base renvoie {kind, value, debt...}. Les écrans attendent {type,...}.
@@ -751,24 +881,26 @@ export default function ClientApp({ tab = "patrimoine", setTab = () => {}, isDes
       <div style={{ flex: 1, padding: contentPad, overflowY: "auto" }}>
         <div style={{ maxWidth: contentMax, margin: "0 auto" }}>
           {loading && tab !== "tri" && tab !== "conseiller"
-            ? <div style={{ color: "#A9B0A6", fontSize: 13, padding: 8 }}>Chargement de votre patrimoine…</div>
+            ? <div style={{ color: "#9AA6BE", fontSize: 13, padding: 8 }}>Chargement de votre patrimoine…</div>
             : <>
                 {tab === "patrimoine" && <Patrimoine assets={assets} wide={isDesktop} />}
                 {tab === "actifs" && <Actifs assets={assets} onSave={handleSave} onRemove={handleRemove} />}
+                {tab === "budget" && <Budget />}
                 {tab === "tri" && <TRI />}
                 {tab === "analyse" && <Analyse assets={assets} />}
                 {tab === "conseiller" && <Conseiller />}
+                {tab === "donnees" && <MesDonnees />}
               </>}
         </div>
       </div>
       {!isDesktop && (
-        <div style={{ position: "sticky", bottom: 0, display: "flex", background: "#1F2C27", borderTop: "1px solid #2C3A33", paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <div style={{ position: "sticky", bottom: 0, display: "flex", background: "#1B2B4B", borderTop: "1px solid #2A3A5C", paddingBottom: "env(safe-area-inset-bottom)" }}>
           {CLIENT_TABS.map((t) => {
             const Icon = t.icon, on = t.id === tab;
             return (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", padding: "12px 0 14px", display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
-                <Icon size={19} color={on ? "#C9A24B" : "#A9B0A6"} strokeWidth={on ? 2.4 : 1.8} />
-                <span style={{ fontSize: 10, color: on ? "#C9A24B" : "#A9B0A6", fontWeight: on ? 600 : 400 }}>{t.label}</span>
+              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, minWidth: 0, background: "none", border: "none", cursor: "pointer", padding: "11px 0 13px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                <Icon size={18} color={on ? "#3E8C9C" : "#9AA6BE"} strokeWidth={on ? 2.4 : 1.8} />
+                <span style={{ fontSize: 9, color: on ? "#3E8C9C" : "#9AA6BE", fontWeight: on ? 600 : 400, whiteSpace: "nowrap" }}>{t.label}</span>
               </button>
             );
           })}

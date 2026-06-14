@@ -8,11 +8,11 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       manifest: {
-        name: "Seine Gestion Privée",
-        short_name: "SGP",
+        name: "Hexa Patrimoine",
+        short_name: "Hexa",
         description: "Espace patrimonial",
-        theme_color: "#16201C",
-        background_color: "#0C120F",
+        theme_color: "#1B2B4B",
+        background_color: "#0A1226",
         display: "standalone",
         icons: [
           { src: "/icon-192.png", sizes: "192x192", type: "image/png" },

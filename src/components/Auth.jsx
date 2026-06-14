@@ -1,17 +1,18 @@
 import React, { useState, useMemo } from "react";
+import Logo from "./Logo.jsx";
 import { Eye, EyeOff, Lock, Shield, Check } from "lucide-react";
 import { signIn, signUp, recordSignupConsents } from "../lib/data";
 import { isConfigured } from "../lib/supabase";
+import { useTheme } from "../lib/theme.jsx";
+const inputStyle = (C) => ({ background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", color: C.ivory, fontSize: 14, width: "100%", boxSizing: "border-box" });
 
-const C = {
-  ink: "#16201C", inkSoft: "#1F2C27", ivory: "#F3EFE6", ivorySoft: "#A9B0A6",
-  brass: "#C9A24B", line: "#2C3A33", alert: "#C2553F", warn: "#C9A24B", positive: "#7FA67C",
-};
-const CABINET = { name: "Seine Gestion Privée" };
-const input = { background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", color: C.ivory, fontSize: 14, width: "100%", boxSizing: "border-box" };
-const fieldLbl = { fontSize: 12, color: C.ivorySoft, display: "block", marginBottom: 6 };
+const CABINET = { name: "Hexa Patrimoine" };
+const fieldLblStyle = (C) => ({ fontSize: 12, color: C.ivorySoft, display: "block", marginBottom: 6 });
 
 function PasswordStrength({ value }) {
+  const C = useTheme();
+  const input = inputStyle(C);
+  const fieldLbl = fieldLblStyle(C);
   const score = useMemo(() => {
     let s = 0;
     if (value.length >= 12) s++;
@@ -22,7 +23,7 @@ function PasswordStrength({ value }) {
   }, [value]);
   if (!value) return null;
   const labels = ["Faible", "Moyen", "Correct", "Solide"];
-  const cols = [C.alert, C.warn, "#9BAE7C", C.positive];
+  const cols = [C.alert, C.warn, "#7FB59E", C.positive];
   return (
     <div style={{ marginTop: 8 }}>
       <div style={{ display: "flex", gap: 4 }}>
@@ -40,6 +41,9 @@ function PasswordStrength({ value }) {
 /* Sous-composants définis au niveau module : stables d'un rendu à l'autre,
    donc les champs ne perdent plus le focus à la frappe. */
 function Tab({ id, view, setView, setErr, setInfo, label }) {
+  const C = useTheme();
+  const input = inputStyle(C);
+  const fieldLbl = fieldLblStyle(C);
   return (
     <button onClick={() => { setView(id); setErr(""); setInfo(""); }}
       style={{ flex: 1, padding: "11px", borderRadius: 9, cursor: "pointer", fontSize: 14, fontWeight: 600, border: "none",
@@ -48,6 +52,9 @@ function Tab({ id, view, setView, setErr, setInfo, label }) {
 }
 
 function PwdField({ value, onChange, show, setShow, showStrength }) {
+  const C = useTheme();
+  const input = inputStyle(C);
+  const fieldLbl = fieldLblStyle(C);
   return (
     <div>
       <label style={fieldLbl}>Mot de passe</label>
@@ -64,6 +71,9 @@ function PwdField({ value, onChange, show, setShow, showStrength }) {
 }
 
 function Checkbox({ checked, onToggle, children }) {
+  const C = useTheme();
+  const input = inputStyle(C);
+  const fieldLbl = fieldLblStyle(C);
   return (
     <button type="button" onClick={onToggle} style={{ display: "flex", alignItems: "flex-start", gap: 10, background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>
       <span style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 6, marginTop: 1, border: `1.5px solid ${checked ? C.brass : C.line}`, background: checked ? C.brass : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -75,6 +85,9 @@ function Checkbox({ checked, onToggle, children }) {
 }
 
 export default function Auth() {
+  const C = useTheme();
+  const input = inputStyle(C);
+  const fieldLbl = fieldLblStyle(C);
   const [view, setView] = useState("login");
   const [show, setShow] = useState(false);
   const [err, setErr] = useState("");
@@ -122,18 +135,16 @@ export default function Auth() {
   // le focus à chaque caractère.
 
   return (
-    <div style={{ display: "flex", justifyContent: "center", minHeight: "100vh", background: "#0C120F", fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div style={{ display: "flex", justifyContent: "center", minHeight: "100vh", background: "#0A1226", fontFamily: "'Inter', system-ui, sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 430, background: C.ink, minHeight: "100vh", padding: "48px 22px 40px", boxSizing: "border-box", overflowY: "auto" }}>
         <div style={{ textAlign: "center", marginBottom: 26 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, border: `1.5px solid ${C.brass}`, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
-            <div style={{ width: 15, height: 15, background: C.brass, borderRadius: 3 }} />
-          </div>
-          <div style={{ color: C.ivory, fontSize: 19, fontWeight: 600 }}>Seine Gestion Privée</div>
+          <div style={{ marginBottom: 12 }}><Logo size={54} radius={12} /></div>
+          <div style={{ color: C.ivory, fontSize: 19, fontWeight: 600 }}>Hexa Patrimoine</div>
           <div style={{ color: C.brass, fontSize: 12, marginTop: 3 }}>Espace patrimonial</div>
         </div>
 
         {!isConfigured && (
-          <div style={{ color: C.warn, fontSize: 12, background: "rgba(201,162,75,0.1)", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.warn}40`, marginBottom: 18 }}>
+          <div style={{ color: C.warn, fontSize: 12, background: "rgba(62,140,156,0.1)", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.warn}40`, marginBottom: 18 }}>
             Supabase non configuré. Renseignez vos clés dans le fichier .env (voir README).
           </div>
         )}

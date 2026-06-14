@@ -59,6 +59,7 @@ create table if not exists profiles (
   telephone         text,
   date_naissance    date,
   residence_fiscale text default 'France',
+  theme             text default 'dark',   -- préférence d'affichage clair/sombre
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
 );

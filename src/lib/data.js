@@ -131,3 +131,68 @@ export async function listClientsNetWorth() {
 export async function getClientAssets(clientId) {
   return await supabase.from("assets").select("*").eq("owner_id", clientId);
 }
+
+/* ==========================================================================
+   DROITS RGPD — portabilité (export) et effacement
+   ========================================================================== */
+
+// Export complet des données de l'utilisateur courant (droit à la portabilité,
+// art. 20 RGPD). Rassemble profil, actifs, simulations et historique de
+// consentement dans un objet structuré, prêt à être téléchargé en JSON.
+export async function exportMyData() {
+  const session = await getSession();
+  const uid = session?.user?.id;
+  if (!uid) return { error: "Non connecté" };
+
+  const [profile, assets, sims, consents] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", uid).single(),
+    supabase.from("assets").select("*").eq("owner_id", uid),
+    supabase.from("sci_simulations").select("*").eq("owner_id", uid),
+    supabase.from("consents").select("*").eq("user_id", uid),
+  ]);
+
+  return {
+    data: {
+      exportDate: new Date().toISOString(),
+      account: { id: uid, email: session.user.email },
+      profile: profile.data ?? null,
+      assets: assets.data ?? [],
+      sci_simulations: sims.data ?? [],
+      consents: consents.data ?? [],
+    },
+  };
+}
+
+// Effacement des données patrimoniales de l'utilisateur (droit à l'effacement,
+// art. 17 RGPD). Supprime actifs, valorisations (en cascade) et simulations.
+// NOTE : la suppression du compte d'authentification lui-même (auth.users)
+// nécessite des droits admin et doit passer par une Edge Function côté serveur
+// (voir docs/SECURITE-RGPD.md). On consigne donc aussi la demande.
+export async function eraseMyData() {
+  const session = await getSession();
+  const uid = session?.user?.id;
+  if (!uid) return { error: "Non connecté" };
+
+  const delAssets = await supabase.from("assets").delete().eq("owner_id", uid);
+  if (delAssets.error) return { error: delAssets.error.message };
+
+  const delSims = await supabase.from("sci_simulations").delete().eq("owner_id", uid);
+  if (delSims.error) return { error: delSims.error.message };
+
+  // Trace la demande d'effacement dans le registre de consentement (retrait).
+  await supabase.from("consents").insert({
+    user_id: uid, type: "data_processing", granted: false, policy_version: "erasure-request",
+  });
+
+  return { data: { erased: true } };
+}
+
+/* ==========================================================================
+   PRÉFÉRENCE DE THÈME (clair / sombre)
+   Stockée dans profiles.theme pour être retrouvée sur tous les appareils.
+   ========================================================================== */
+export async function setThemePreference(mode) {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Non connecté" };
+  return await supabase.from("profiles").update({ theme: mode }).eq("id", session.user.id);
+}
