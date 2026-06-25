@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 
 /* ==========================================================================
-   THÈME HEXA — deux palettes (clair / sombre), un contexte unique.
+   THÈME MON KAP PAT — deux palettes (clair / sombre), un contexte unique.
    Toutes les couleurs de l'app proviennent d'ici via useTheme().
    ========================================================================== */
 
-// Palette claire — fidèle au tableau de bord HEXA (fond clair institutionnel).
+// Palette claire — tableau de bord clair institutionnel.
 const LIGHT = {
   mode: "light",
   bg: "#E9EBF0",          // fond extérieur
@@ -13,7 +13,7 @@ const LIGHT = {
   inkSoft: "#FFFFFF",     // cartes
   ivory: "#1B2B4B",       // texte principal (bleu nuit)
   ivorySoft: "#5B6577",   // texte secondaire
-  brass: "#22535A",       // accent (bleu-pétrole HEXA)
+  brass: "#22535A",       // accent (bleu-pétrole)
   brassSoft: "#84B7BE",   // accent clair
   line: "#E4E8EF",        // bordures
   alert: "#C2553F",

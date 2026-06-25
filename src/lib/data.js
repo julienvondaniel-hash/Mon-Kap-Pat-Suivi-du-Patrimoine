@@ -32,6 +32,11 @@ export async function signOut() {
   return await supabase.auth.signOut();
 }
 
+// Renvoie l'e-mail de confirmation (lien expiré, non reçu, tombé en spam…).
+export async function resendConfirmation(email) {
+  return await supabase.auth.resend({ type: "signup", email });
+}
+
 export async function getSession() {
   const { data } = await supabase.auth.getSession();
   return data.session;
@@ -74,6 +79,37 @@ export async function upsertAsset(asset) {
 
 export async function deleteAsset(id) {
   return await supabase.from("assets").delete().eq("id", id);
+}
+
+/* ==========================================================================
+   HISTORIQUE DE PATRIMOINE — relevés datés de la valeur nette
+   Alimente la courbe de progression de l'onglet Patrimoine. Un relevé par jour
+   et par utilisateur : on upsert sur (owner_id, captured_at) pour que la courbe
+   reflète la dernière saisie de la journée sans multiplier les points.
+   ========================================================================== */
+export async function recordNetWorthSnapshot({ net, gross, debt }) {
+  const session = await getSession();
+  const uid = session?.user?.id;
+  if (!uid) return { error: "Non connecté" };
+  const today = new Date().toISOString().slice(0, 10); // AAAA-MM-JJ
+  return await supabase
+    .from("net_worth_snapshots")
+    .upsert(
+      { owner_id: uid, captured_at: today, net_worth: net, gross, total_debt: debt },
+      { onConflict: "owner_id,captured_at" }
+    );
+}
+
+// Relevés datés (du plus ancien au plus récent) de l'utilisateur courant.
+export async function listNetWorthHistory() {
+  const session = await getSession();
+  const uid = session?.user?.id;
+  if (!uid) return { data: [] };
+  return await supabase
+    .from("net_worth_snapshots")
+    .select("captured_at, net_worth, gross, total_debt")
+    .eq("owner_id", uid)
+    .order("captured_at", { ascending: true });
 }
 
 /* ==========================================================================
