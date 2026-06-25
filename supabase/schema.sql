@@ -80,13 +80,27 @@ create table if not exists assets (
   updated_at  timestamptz not null default now()
 );
 
--- Historique de valorisation (pour les graphiques d'évolution)
+-- Historique de valorisation par actif (granularité fine, optionnelle)
 create table if not exists asset_valuations (
   id          uuid primary key default uuid_generate_v4(),
   asset_id    uuid not null references assets(id) on delete cascade,
   valued_at   date not null default current_date,
   value       numeric(14,2) not null,
   created_at  timestamptz not null default now()
+);
+
+-- Relevés datés de la valeur nette consolidée — alimente la courbe de
+-- progression de l'onglet Patrimoine. Un relevé par jour et par utilisateur
+-- (contrainte d'unicité utilisée pour l'upsert quotidien côté application).
+create table if not exists net_worth_snapshots (
+  id          uuid primary key default uuid_generate_v4(),
+  owner_id    uuid not null references profiles(id) on delete cascade,
+  captured_at date not null default current_date,
+  net_worth   numeric(14,2) not null default 0,
+  gross       numeric(14,2) not null default 0,
+  total_debt  numeric(14,2) not null default 0,
+  created_at  timestamptz not null default now(),
+  unique (owner_id, captured_at)
 );
 
 -- ----------------------------------------------------------------------------
@@ -135,6 +149,7 @@ create table if not exists access_logs (
 -- ----------------------------------------------------------------------------
 create index if not exists idx_assets_owner       on assets(owner_id);
 create index if not exists idx_valuations_asset   on asset_valuations(asset_id);
+create index if not exists idx_snapshots_owner    on net_worth_snapshots(owner_id);
 create index if not exists idx_consents_user      on consents(user_id);
 create index if not exists idx_logs_actor         on access_logs(actor_id);
 create index if not exists idx_profiles_advisor   on profiles(advisor_id);
@@ -168,6 +183,7 @@ $$;
 alter table profiles          enable row level security;
 alter table assets            enable row level security;
 alter table asset_valuations  enable row level security;
+alter table net_worth_snapshots enable row level security;
 alter table sci_simulations   enable row level security;
 alter table consents          enable row level security;
 alter table access_logs       enable row level security;
@@ -198,6 +214,16 @@ create policy valuations_access on asset_valuations
   for select using (
     exists (select 1 from assets a where a.id = asset_id
             and (a.owner_id = auth.uid() or is_advisor_of(a.owner_id)))
+  );
+
+-- ---- NET_WORTH_SNAPSHOTS ----
+-- Le client lit/écrit ses propres relevés ; son conseiller les lit (suivi).
+create policy snapshots_owner_all on net_worth_snapshots
+  for all using (
+    owner_id = auth.uid()
+    or is_advisor_of(owner_id)
+  ) with check (
+    owner_id = auth.uid()
   );
 
 -- ---- SCI_SIMULATIONS ----
