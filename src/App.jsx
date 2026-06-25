@@ -12,14 +12,24 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [ready, setReady] = useState(false);
+  const [recovery, setRecovery] = useState(false);
   const [view, setView] = useState("client");
   const [tab, setTab] = useState("patrimoine");
   const [mode, setMode] = useState("dark");
   const isDesktop = useIsDesktop();
 
   useEffect(() => {
+    // Arrivée depuis un lien « mot de passe oublié » : le hash d'URL contient
+    // type=recovery. On bascule immédiatement (avant même l'événement) pour
+    // éviter un affichage furtif de l'application.
+    if (typeof window !== "undefined" && window.location.hash.includes("type=recovery")) {
+      setRecovery(true);
+    }
     getSession().then((s) => { setSession(s); setReady(true); });
-    const unsub = onAuthChange((s) => setSession(s));
+    const unsub = onAuthChange((event, s) => {
+      if (event === "PASSWORD_RECOVERY") setRecovery(true);
+      setSession(s);
+    });
     return unsub;
   }, []);
 
@@ -40,6 +50,10 @@ export default function App() {
   };
 
   if (!ready) return <div style={{ minHeight: "100vh", background: "#0A1226" }} />;
+  // Écran de définition d'un nouveau mot de passe (lien de récupération).
+  // Prioritaire sur l'app : la session de récupération est active, mais on veut
+  // d'abord que l'utilisateur choisisse son nouveau mot de passe.
+  if (recovery) return <ThemeProvider mode={mode}><Auth initialView="reset" onResetDone={() => setRecovery(false)} /></ThemeProvider>;
   if (!session) return <ThemeProvider mode={mode}><Auth /></ThemeProvider>;
 
   const isAdvisor = profile?.role === "advisor" || profile?.role === "admin";
