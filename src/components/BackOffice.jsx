@@ -2,10 +2,17 @@ import React, { useState, useEffect, useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { ChevronRight, ChevronLeft, Users, AlertTriangle, Search } from "lucide-react";
 import { listClientsNetWorth, getClientAssets } from "../lib/data";
+import { rankClients } from "../lib/scoring";
 import Hex from "./Hex.jsx";
 import { useTheme } from "../lib/theme.jsx";
 
 const fmt = (n) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n || 0);
+
+const TIER_COLORS = {
+  chaud: { bg: "rgba(31,138,109,0.15)", fg: "#2BA37E", label: "Chaud" },
+  tiède: { bg: "rgba(201,162,75,0.15)", fg: "#C9A24B", label: "Tiède" },
+  froid: { bg: "rgba(110,140,168,0.15)", fg: "#8593AD", label: "Froid" },
+};
 
 function Card({ children, style }) {
   const C = useTheme();
@@ -30,11 +37,23 @@ export default function BackOffice({ wide = false }) {
 
   useEffect(() => {
     let alive = true;
-    listClientsNetWorth().then(({ data, error }) => {
+    (async () => {
+      const { data, error } = await listClientsNetWorth();
       if (!alive) return;
-      if (!error && data) setClients(data);
+      if (error || !data) { setLoading(false); return; }
+      // Pour chaque client, récupérer ses actifs (nécessaires au scoring).
+      const enriched = await Promise.all(data.map(async (c) => {
+        const { data: assets } = await getClientAssets(c.client_id);
+        return {
+          client_id: c.client_id, prenom: c.prenom, nom: c.nom,
+          netWorth: Number(c.net_worth), gross: Number(c.gross), totalDebt: Number(c.total_debt),
+          asset_count: c.asset_count, assets: assets || [],
+        };
+      }));
+      if (!alive) return;
+      setClients(rankClients(enriched));   // triés par score décroissant
       setLoading(false);
-    });
+    })();
     return () => { alive = false; };
   }, []);
 
@@ -45,8 +64,9 @@ export default function BackOffice({ wide = false }) {
   }, [clients, q]);
 
   const totals = useMemo(() => ({
-    aum: clients.reduce((s, c) => s + Number(c.net_worth), 0),
+    aum: clients.reduce((s, c) => s + Number(c.netWorth), 0),
     count: clients.length,
+    hot: clients.filter((c) => c.tier === "chaud").length,
   }), [clients]);
 
   if (selected) return <ClientDetail client={selected} onBack={() => setSelected(null)} />;
@@ -58,6 +78,11 @@ export default function BackOffice({ wide = false }) {
         <div style={{ fontSize: 34, fontWeight: 600, color: C.ivory, letterSpacing: "-0.02em", lineHeight: 1 }}>{fmt(totals.aum)}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, color: C.ivorySoft, fontSize: 13 }}>
           <Users size={15} color={C.brass} /> {totals.count} client{totals.count > 1 ? "s" : ""} suivi{totals.count > 1 ? "s" : ""}
+          {totals.hot > 0 && (
+            <span style={{ marginLeft: 6, padding: "2px 10px", borderRadius: 20, background: TIER_COLORS.chaud.bg, color: TIER_COLORS.chaud.fg, fontWeight: 600, fontSize: 12 }}>
+              {totals.hot} à fort potentiel
+            </span>
+          )}
         </div>
       </Card>
 
@@ -70,23 +95,37 @@ export default function BackOffice({ wide = false }) {
       <Card style={{ padding: 0, overflow: "hidden" }}>
         {loading && <div style={{ padding: 22, color: C.ivorySoft, fontSize: 13 }}>Chargement…</div>}
         {!loading && filtered.length === 0 && <div style={{ padding: 22, color: C.ivorySoft, fontSize: 13 }}>Aucun client. Les comptes rattachés à votre profil de conseiller apparaîtront ici.</div>}
-        {filtered.map((c, i) => (
+        {filtered.map((c, i) => {
+          const tier = TIER_COLORS[c.tier] || TIER_COLORS.froid;
+          const topSignal = c.signals?.[0]?.label;
+          return (
           <button key={c.client_id} onClick={() => setSelected(c)}
             style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "16px 20px", background: "none", border: "none", borderTop: i > 0 ? `1px solid ${C.line}` : "none", cursor: "pointer", textAlign: "left" }}>
-            <div style={{ width: 38, height: 38, borderRadius: "50%", background: C.line, display: "flex", alignItems: "center", justifyContent: "center", color: C.brass, fontSize: 14, fontWeight: 600, flexShrink: 0 }}>
-              {(c.prenom?.[0] || "") + (c.nom?.[0] || "")}
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <div style={{ width: 40, height: 40, borderRadius: "50%", background: C.line, display: "flex", alignItems: "center", justifyContent: "center", color: C.brass, fontSize: 14, fontWeight: 600 }}>
+                {(c.prenom?.[0] || "") + (c.nom?.[0] || "")}
+              </div>
+              <div title={`Score ${c.score}/100`} style={{ position: "absolute", bottom: -3, right: -5, minWidth: 22, height: 18, padding: "0 4px", borderRadius: 9, background: tier.bg, color: tier.fg, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${C.inkSoft}` }}>
+                {c.score}
+              </div>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ color: C.ivory, fontSize: 15, fontWeight: 500 }}>{c.prenom} {c.nom}</div>
-              <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 2 }}>{c.asset_count} ligne{c.asset_count > 1 ? "s" : ""} d'actif</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ color: C.ivory, fontSize: 15, fontWeight: 500 }}>{c.prenom} {c.nom}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: tier.fg, background: tier.bg, padding: "1px 7px", borderRadius: 20 }}>{tier.label}</span>
+              </div>
+              <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {topSignal || `${c.asset_count} ligne${c.asset_count > 1 ? "s" : ""} d'actif`}
+              </div>
             </div>
             <div style={{ textAlign: "right" }}>
-              <div style={{ color: C.ivory, fontSize: 15, fontWeight: 600 }}>{fmt(c.net_worth)}</div>
-              {Number(c.total_debt) > 0 && <div style={{ color: C.ivorySoft, fontSize: 11, marginTop: 2 }}>dette {fmt(c.total_debt)}</div>}
+              <div style={{ color: C.ivory, fontSize: 15, fontWeight: 600 }}>{fmt(c.netWorth)}</div>
+              {Number(c.totalDebt) > 0 && <div style={{ color: C.ivorySoft, fontSize: 11, marginTop: 2 }}>dette {fmt(c.totalDebt)}</div>}
             </div>
             <ChevronRight size={18} color={C.ivorySoft} />
           </button>
-        ))}
+          );
+        })}
       </Card>
     </div>
   );
@@ -124,11 +163,35 @@ function ClientDetail({ client, onBack }) {
 
       <Card>
         <Eyebrow>{client.prenom} {client.nom}</Eyebrow>
-        <div style={{ fontSize: 30, fontWeight: 600, color: C.ivory, letterSpacing: "-0.02em", lineHeight: 1 }}>{fmt(client.net_worth)}</div>
+        <div style={{ fontSize: 30, fontWeight: 600, color: C.ivory, letterSpacing: "-0.02em", lineHeight: 1 }}>{fmt(client.netWorth)}</div>
         <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 12, color: C.ivorySoft }}>
-          <span>Brut {fmt(client.gross)}</span><span>Dette {fmt(client.total_debt)}</span>
+          <span>Brut {fmt(client.gross)}</span><span>Dette {fmt(client.totalDebt)}</span>
         </div>
       </Card>
+
+      {typeof client.score === "number" && (
+        <Card style={{ borderLeft: `3px solid ${(TIER_COLORS[client.tier] || TIER_COLORS.froid).fg}` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: client.signals?.length ? 12 : 0 }}>
+            <Eyebrow>Potentiel commercial</Eyebrow>
+            <span style={{ fontSize: 13, fontWeight: 700, color: (TIER_COLORS[client.tier] || TIER_COLORS.froid).fg }}>
+              {client.score}/100 · {(TIER_COLORS[client.tier] || TIER_COLORS.froid).label}
+            </span>
+          </div>
+          {client.signals?.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {client.signals.map((sig, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: C.ivory }}>
+                  <Hex size={9} color={(TIER_COLORS[client.tier] || TIER_COLORS.froid).fg} />
+                  {sig.label}
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: C.ivorySoft, marginTop: 12, lineHeight: 1.5 }}>
+            Aide à la priorisation interne. Ne constitue pas une recommandation d'investissement.
+          </div>
+        </Card>
+      )}
 
       {topShare > 0.4 && (
         <Card style={{ borderLeft: `3px solid ${C.alert}` }}>

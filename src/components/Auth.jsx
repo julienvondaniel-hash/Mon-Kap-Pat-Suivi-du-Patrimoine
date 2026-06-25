@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from "react";
 import Logo from "./Logo.jsx";
-import { Eye, EyeOff, Lock, Shield, Check } from "lucide-react";
-import { signIn, signUp, recordSignupConsents } from "../lib/data";
+import { Eye, EyeOff, Lock, Shield, Check, Mail } from "lucide-react";
+import { signIn, signUp, recordSignupConsents, resendConfirmation } from "../lib/data";
 import { isConfigured } from "../lib/supabase";
 import { useTheme } from "../lib/theme.jsx";
 const inputStyle = (C) => ({ background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", color: C.ivory, fontSize: 14, width: "100%", boxSizing: "border-box" });
 
-const CABINET = { name: "Hexa Patrimoine" };
+const CABINET = { name: "Mon Kap Pat" };
 const fieldLblStyle = (C) => ({ fontSize: 12, color: C.ivorySoft, display: "block", marginBottom: 6 });
 
 function PasswordStrength({ value }) {
@@ -126,8 +126,16 @@ export default function Auth() {
       await recordSignupConsents(data.user.id, { cgu: f.cgu, dataProcessing: f.consentData, marketing: f.consentMarketing });
     }
     setBusy(false);
-    setInfo("Compte créé. Vérifiez votre e-mail pour confirmer votre adresse, puis connectez-vous.");
-    setView("login");
+    setView("confirm");
+  }
+
+  // Renvoi de l'e-mail de confirmation depuis l'écran dédié.
+  const [resent, setResent] = useState(false);
+  async function handleResend() {
+    setErr(""); setResent(false);
+    const { error } = await resendConfirmation(f.email);
+    if (error) return setErr(error.message);
+    setResent(true);
   }
 
   // Les sous-composants Tab, PwdField et Checkbox sont définis au niveau module
@@ -139,8 +147,8 @@ export default function Auth() {
       <div style={{ width: "100%", maxWidth: 430, background: C.ink, minHeight: "100vh", padding: "48px 22px 40px", boxSizing: "border-box", overflowY: "auto" }}>
         <div style={{ textAlign: "center", marginBottom: 26 }}>
           <div style={{ marginBottom: 12 }}><Logo size={54} radius={12} /></div>
-          <div style={{ color: C.ivory, fontSize: 19, fontWeight: 600 }}>Hexa Patrimoine</div>
-          <div style={{ color: C.brass, fontSize: 12, marginTop: 3 }}>Espace patrimonial</div>
+          <div style={{ color: C.ivory, fontSize: 19, fontWeight: 600 }}>Mon Kap Pat</div>
+          <div style={{ color: C.brass, fontSize: 12, marginTop: 3 }}>Suivi de patrimoine</div>
         </div>
 
         {!isConfigured && (
@@ -149,6 +157,39 @@ export default function Auth() {
           </div>
         )}
 
+        {view === "confirm" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 18, textAlign: "center", marginTop: 8 }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(62,140,156,0.14)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
+              <Mail size={26} color={C.brass} />
+            </div>
+            <div>
+              <div style={{ color: C.ivory, fontSize: 18, fontWeight: 600 }}>Vérifiez votre boîte mail</div>
+              <div style={{ color: C.ivorySoft, fontSize: 14, marginTop: 8, lineHeight: 1.55 }}>
+                Nous avons envoyé un lien de confirmation à<br />
+                <span style={{ color: C.ivory, fontWeight: 600 }}>{f.email}</span>.
+              </div>
+            </div>
+            <div style={{ background: C.inkSoft, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16, textAlign: "left", fontSize: 13, color: C.ivorySoft, lineHeight: 1.6 }}>
+              1. Ouvrez l'e-mail de Mon Kap Pat et cliquez sur le lien.<br />
+              2. Revenez ici et connectez-vous.<br />
+              <span style={{ display: "block", marginTop: 8, color: C.ivory }}>Vous ne le trouvez pas ? Pensez à vérifier vos courriers indésirables (spam).</span>
+            </div>
+
+            {resent && <div style={{ color: C.positive, fontSize: 13, background: "rgba(127,166,124,0.12)", padding: "10px 12px", borderRadius: 10 }}>E-mail renvoyé. Vérifiez votre boîte de réception.</div>}
+            {err && <div style={{ color: C.alert, fontSize: 13, background: "rgba(194,85,63,0.1)", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.alert}40` }}>{err}</div>}
+
+            <button onClick={handleResend} style={{ background: "none", color: C.brass, border: `1px solid ${C.brass}`, borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+              Renvoyer l'e-mail de confirmation
+            </button>
+            <button onClick={() => { setView("login"); setErr(""); setResent(false); }} style={{ background: C.brass, color: C.ink, border: "none", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
+              J'ai confirmé, me connecter
+            </button>
+            <button onClick={() => { setView("signup"); setErr(""); }} style={{ background: "none", color: C.ivorySoft, border: "none", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>
+              Modifier mon adresse e-mail
+            </button>
+          </div>
+        ) : (
+        <>
         <div style={{ display: "flex", gap: 6, background: C.inkSoft, padding: 4, borderRadius: 12, border: `1px solid ${C.line}`, marginBottom: 22 }}>
           <Tab id="login" label="Connexion" view={view} setView={setView} setErr={setErr} setInfo={setInfo} />
           <Tab id="signup" label="Créer un compte" view={view} setView={setView} setErr={setErr} setInfo={setInfo} />
@@ -227,6 +268,8 @@ export default function Auth() {
               Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, d'effacement et de portabilité de vos données, ainsi que du droit de retirer votre consentement à tout moment. Responsable de traitement : {CABINET.name}. Vos données ne sont jamais cédées à des tiers à des fins publicitaires.
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

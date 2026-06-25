@@ -4,7 +4,7 @@ import { exportMyData, eraseMyData, signOut } from "../lib/data";
 import Hex from "./Hex.jsx";
 import { useTheme } from "../lib/theme.jsx";
 
-const CABINET = { name: "Hexa Patrimoine", dpoEmail: "j.daniel@hexa-patrimoine.com" };
+const CABINET = { name: "Mon Kap Pat", dpoEmail: "j.daniel@hexa-patrimoine.com" };
 
 function Card({ children, style }) {
   const C = useTheme();

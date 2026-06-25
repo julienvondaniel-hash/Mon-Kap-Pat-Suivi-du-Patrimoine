@@ -1,7 +1,7 @@
 import React from "react";
 
-// Signature de marque : petit hexagone repris du logo HEXA, utilisé comme
-// puce devant les titres de section. `color` et `size` sont paramétrables.
+// Signature de marque : petit hexagone décoratif, utilisé comme puce devant
+// les titres de section. `color` et `size` sont paramétrables.
 export default function Hex({ size = 12, color = "#22535A", style }) {
   return (
     <span style={{

@@ -8,13 +8,13 @@ import {
   Calculator, ChevronRight, Shield, Droplet, Layers, Wallet,
   Plus, Trash2, X, Pencil, Lock, PiggyBank,
 } from "lucide-react";
-import { listAssets, upsertAsset, deleteAsset, saveSciSimulation } from "../lib/data";
+import { listAssets, upsertAsset, deleteAsset, saveSciSimulation, recordNetWorthSnapshot, listNetWorthHistory } from "../lib/data";
 import MesDonnees from "./MesDonnees.jsx";
 import Logo from "./Logo.jsx";
 import Hex from "./Hex.jsx";
 import { useTheme, SERIF } from "../lib/theme.jsx";
 
-const CABINET = { name: "Hexa Patrimoine", tel: "0658803630", telDisplay: "06 58 80 36 30", email: "j.daniel@hexa-patrimoine.com" };
+const CABINET = { name: "Mon Kap Pat", tel: "0658803630", telDisplay: "06 58 80 36 30", email: "j.daniel@hexa-patrimoine.com" };
 
 /* ------------------------------------------------------------------ */
 /*  Design tokens — univers family office                              */
@@ -263,17 +263,18 @@ function Patrimoine({ assets, wide = false, history = [] }) {
   const mob = assets.filter((a) => a.type === "mobilier").reduce((s, a) => s + a.value, 0);
   const imm = assets.filter((a) => a.type === "immobilier").reduce((s, a) => s + a.value, 0);
 
-  // Historique réel uniquement. Aucune donnée passée inventée.
-  // - Si on a un historique (table asset_valuations), on l'affiche + le point actuel.
-  // - Sinon, un seul point : la valeur d'aujourd'hui (pas de courbe fictive).
+  // Historique réel uniquement, issu des relevés datés de la valeur nette
+  // (net_worth_snapshots). Chaque relevé = un point de la courbe ; le dernier
+  // correspond à aujourd'hui. Sans historique (1er jour ou table absente),
+  // un seul point : la valeur d'aujourd'hui — aucune donnée passée inventée.
   const moisCourt = new Date().toLocaleDateString("fr-FR", { month: "short" });
   const chart = history.length > 0
-    ? [...history, { m: moisCourt, v: net }]
+    ? history.map((h) => ({ m: h.m, v: h.v }))
     : [{ m: moisCourt, v: net }];
 
-  // Performance calculée seulement si on dispose d'un point de départ réel.
-  const perf = history.length > 0 && history[0].v
-    ? ((net - history[0].v) / history[0].v) * 100
+  // Progression depuis le premier relevé (au moins deux points datés requis).
+  const perf = history.length > 1 && history[0].v
+    ? ((history[history.length - 1].v - history[0].v) / history[0].v) * 100
     : null;
 
   return (
@@ -854,11 +855,39 @@ const fromDb = (row) => ({
 // latéral sur ordinateur). `isDesktop` masque la barre d'onglets du bas.
 export default function ClientApp({ tab = "patrimoine", setTab = () => {}, isDesktop = false }) {
   const [assets, setAssets] = useState([]);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Enregistre le relevé daté du jour (valeur nette) puis recharge l'historique,
+  // pour que l'onglet Patrimoine affiche la progression réelle dans le temps.
+  const syncHistory = async (mapped) => {
+    const gross = mapped.reduce((s, a) => s + a.value, 0);
+    const debt = mapped.reduce((s, a) => s + (a.debt || 0), 0);
+    // On n'enregistre un point que s'il existe au moins un actif (pas de 0 trompeur).
+    if (mapped.length > 0) {
+      await recordNetWorthSnapshot({ net: gross - debt, gross, debt });
+    }
+    const { data } = await listNetWorthHistory();
+    if (data && data.length) {
+      setHistory(data.map((r) => ({
+        m: new Date(r.captured_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }),
+        v: Number(r.net_worth),
+        date: r.captured_at,
+      })));
+    } else {
+      setHistory([]);
+    }
+  };
 
   const refresh = async () => {
     const { data, error } = await listAssets();
-    if (!error && data) setAssets(data.map(fromDb));
+    if (!error && data) {
+      const mapped = data.map(fromDb);
+      setAssets(mapped);
+      // Best-effort : si la table d'historique n'existe pas encore côté Supabase,
+      // on ignore l'erreur et l'app continue (courbe réduite au point du jour).
+      try { await syncHistory(mapped); } catch (_) { /* historique indisponible */ }
+    }
     setLoading(false);
   };
   useEffect(() => { refresh(); }, []);
@@ -883,7 +912,7 @@ export default function ClientApp({ tab = "patrimoine", setTab = () => {}, isDes
           {loading && tab !== "tri" && tab !== "conseiller"
             ? <div style={{ color: "#9AA6BE", fontSize: 13, padding: 8 }}>Chargement de votre patrimoine…</div>
             : <>
-                {tab === "patrimoine" && <Patrimoine assets={assets} wide={isDesktop} />}
+                {tab === "patrimoine" && <Patrimoine assets={assets} wide={isDesktop} history={history} />}
                 {tab === "actifs" && <Actifs assets={assets} onSave={handleSave} onRemove={handleRemove} />}
                 {tab === "budget" && <Budget />}
                 {tab === "tri" && <TRI />}
