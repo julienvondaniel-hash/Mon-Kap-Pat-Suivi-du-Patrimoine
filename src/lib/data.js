@@ -87,13 +87,19 @@ export async function listAssets() {
 }
 
 export async function upsertAsset(asset) {
-  const { id, ...rest } = asset;
+  const { id, valuedAt, ...rest } = asset;
   const session = await getSession();
   const payload = { ...rest, owner_id: session?.user?.id };
-  if (id && typeof id === "string") {
-    return await supabase.from("assets").update(payload).eq("id", id).select().single();
+  const result = (id && typeof id === "string")
+    ? await supabase.from("assets").update(payload).eq("id", id).select().single()
+    : await supabase.from("assets").insert(payload).select().single();
+  // Date de valorisation : écrite séparément et de façon tolérante. Si la colonne
+  // valued_at n'existe pas encore côté base (migration-actif-date.sql non
+  // appliquée), l'actif est tout de même enregistré (l'erreur est ignorée).
+  if (!result.error && valuedAt && result.data?.id) {
+    await supabase.from("assets").update({ valued_at: valuedAt }).eq("id", result.data.id);
   }
-  return await supabase.from("assets").insert(payload).select().single();
+  return result;
 }
 
 export async function deleteAsset(id) {
