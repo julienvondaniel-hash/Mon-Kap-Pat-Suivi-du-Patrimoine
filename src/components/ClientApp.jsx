@@ -33,7 +33,8 @@ const CATEGORIES = {
     { key: "Obligations", label: "Obligations / fonds €", liquid: true, market: false },
     { key: "Private equity", label: "Private equity / non coté", liquid: false, market: true },
     { key: "Liquidités", label: "Liquidités / livrets", liquid: true, market: false },
-    { key: "Autre mobilier", label: "Autre (crypto, métaux…)", liquid: true, market: true },
+    { key: "Métaux précieux", label: "Métaux précieux (or, argent)", liquid: true, market: true },
+    { key: "Autre mobilier", label: "Autre (crypto…)", liquid: true, market: true },
   ],
   immobilier: [
     { key: "Résidence principale", label: "Résidence principale", liquid: false, market: false },
@@ -208,25 +209,47 @@ function analyse(assets) {
   const net = assets.reduce((s, a) => s + a.value - (a.debt || 0), 0);
   if (gross === 0) return { gross, net, items: [] };
   const out = [];
-  const topLine = assets.reduce((m, a) => Math.max(m, a.value), 0) / gross;
-  if (topLine > 0.4)
-    out.push({ icon: Layers, level: "alert", title: "Concentration",
-      text: `Un seul actif pèse ${(topLine * 100).toFixed(0)} % du brut. Au-delà de 40 %, l'exposition à un événement isolé est forte.` });
-  const liquid = assets.filter((a) => catMeta(a.category).liquid).reduce((s, a) => s + a.value, 0) / gross;
-  if (liquid < 0.4)
-    out.push({ icon: Droplet, level: "warn", title: "Liquidité",
-      text: `Les actifs mobilisables rapidement représentent ${(liquid * 100).toFixed(0)} %. Une part illiquide élevée limite la réactivité.` });
-  const market = assets.filter((a) => catMeta(a.category).market).reduce((s, a) => s + a.value, 0) / gross;
-  if (market > 0.5)
-    out.push({ icon: TrendingUp, level: "warn", title: "Risque de marché",
-      text: `${(market * 100).toFixed(0)} % du patrimoine est exposé à la volatilité des marchés.` });
+  const pct = (x) => `${(x * 100).toFixed(0)} %`;
+  const sumCat = (key) => assets.filter((a) => a.category === key).reduce((s, a) => s + a.value, 0);
+  const sumType = (t) => assets.filter((a) => a.type === t).reduce((s, a) => s + a.value, 0);
+
+  // Concentration immobilière — sensibilité à une remontée des taux.
+  const immo = sumType("immobilier") / gross;
+  if (immo > 0.25)
+    out.push({ icon: Home, level: "warn", title: "Concentration immobilière",
+      text: `L'immobilier représente ${pct(immo)} de votre patrimoine. Attention au risque de baisse en cas de remontée des taux.` });
+
+  // Exposition obligataire — même sensibilité aux taux.
+  const oblig = sumCat("Obligations") / gross;
+  if (oblig > 0.25)
+    out.push({ icon: TrendingUp, level: "warn", title: "Exposition obligataire",
+      text: `Les obligations / fonds € représentent ${pct(oblig)} du patrimoine. Attention au risque de baisse en cas de remontée des taux.` });
+
+  // Liquidités dormantes — trop de cash non investi.
+  const cash = sumCat("Liquidités");
+  if (cash > 30000 && cash / gross > 0.10)
+    out.push({ icon: Droplet, level: "warn", title: "Trop de liquidités",
+      text: `Vous détenez ${fmt(cash)} de liquidités (${pct(cash / gross)} du patrimoine). Vous avez trop de cash : votre argent n'est pas assez au travail.` });
+
+  // Sous-exposition aux métaux précieux — diversification / protection inflation.
+  const metaux = sumCat("Métaux précieux");
+  if (metaux / gross < 0.05)
+    out.push({ icon: Layers, level: "warn", title: "Métaux précieux",
+      text: metaux === 0
+        ? `Absence de métaux (or, argent) dans votre portefeuille. Une poche de métaux précieux peut diversifier et protéger en cas d'inflation.`
+        : `Les métaux précieux représentent moins de 5 % (${pct(metaux / gross)}). Une exposition un peu plus élevée renforcerait la diversification.` });
+
+  // Endettement — effet de levier.
   const debt = assets.reduce((s, a) => s + (a.debt || 0), 0);
-  const ltv = gross > 0 ? debt / gross : 0;
+  const ltv = debt / gross;
   if (ltv > 0.5)
     out.push({ icon: AlertTriangle, level: "alert", title: "Endettement",
-      text: `Le ratio dette / actifs atteint ${(ltv * 100).toFixed(0)} %. Un effet de levier élevé amplifie les variations de valeur nette.` });
+      text: `Le ratio dette / actifs atteint ${pct(ltv)}. Un effet de levier élevé amplifie les variations de votre valeur nette.` });
+
+  // Note positive : diversification globale.
   out.push({ icon: Shield, level: "ok", title: "Diversification",
-    text: `Patrimoine réparti sur ${new Set(assets.map((a) => a.category)).size} catégories d'actifs.` });
+    text: `Patrimoine réparti sur ${new Set(assets.map((a) => a.category)).size} catégorie(s) d'actifs.` });
+
   return { gross, net, items: out };
 }
 
