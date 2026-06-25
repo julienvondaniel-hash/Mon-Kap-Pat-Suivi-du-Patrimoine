@@ -19,7 +19,7 @@ export const EDITEUR = {
   service: "Mon Kap Pat",
   raisonSociale: "Seine Gestion Privée",
   president: "Julien DANIEL",
-  email: "j.daniel@hexa-patrimoine.com",
+  email: "julien_daniel@yahoo.fr",
   telephone: "06 58 80 36 30",
 };
 
