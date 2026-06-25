@@ -106,17 +106,31 @@ export async function deleteAsset(id) {
    et par utilisateur : on upsert sur (owner_id, captured_at) pour que la courbe
    reflète la dernière saisie de la journée sans multiplier les points.
    ========================================================================== */
-export async function recordNetWorthSnapshot({ net, gross, debt }) {
+export async function recordNetWorthSnapshot({ net, gross, debt, capturedAt }) {
   const session = await getSession();
   const uid = session?.user?.id;
   if (!uid) return { error: "Non connecté" };
-  const today = new Date().toISOString().slice(0, 10); // AAAA-MM-JJ
+  // Date du relevé : celle fournie (saisie manuelle, ex. relevé antérieur) ou,
+  // à défaut, aujourd'hui. Un seul relevé par jour et par utilisateur (upsert).
+  const day = capturedAt || new Date().toISOString().slice(0, 10); // AAAA-MM-JJ
   return await supabase
     .from("net_worth_snapshots")
     .upsert(
-      { owner_id: uid, captured_at: today, net_worth: net, gross, total_debt: debt },
+      { owner_id: uid, captured_at: day, net_worth: net, gross, total_debt: debt },
       { onConflict: "owner_id,captured_at" }
     );
+}
+
+// Supprime un relevé daté (correction d'un point saisi par erreur).
+export async function deleteNetWorthSnapshot(capturedAt) {
+  const session = await getSession();
+  const uid = session?.user?.id;
+  if (!uid) return { error: "Non connecté" };
+  return await supabase
+    .from("net_worth_snapshots")
+    .delete()
+    .eq("owner_id", uid)
+    .eq("captured_at", capturedAt);
 }
 
 // Relevés datés (du plus ancien au plus récent) de l'utilisateur courant.
