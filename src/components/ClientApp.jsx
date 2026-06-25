@@ -783,14 +783,40 @@ function Analyse({ assets }) {
 /* ------------------------------------------------------------------ */
 /*  Écran Conseiller                                                   */
 /* ------------------------------------------------------------------ */
+// Agenda des conférences. Seul le prochain événement à venir est affiché ; le
+// lendemain d'un événement, le suivant prend automatiquement sa place. Si tous
+// sont passés dans l'année en cours, on repart sur le premier de l'année suivante.
+const EVENEMENTS = [
+  { d: 3, m: 9, label: "Cession d'entreprises" },
+  { d: 1, m: 10, label: "Placements financiers" },
+  { d: 5, m: 11, label: "Protection et transmission" },
+  { d: 3, m: 12, label: "Assurance Vie Luxembourgeoise" },
+];
+
+function prochainEvenement() {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const y = now.getFullYear();
+  const dansLAnnee = EVENEMENTS.map((e) => ({ ...e, date: new Date(y, e.m - 1, e.d) }));
+  return (
+    dansLAnnee.find((e) => e.date >= today) ||
+    { ...EVENEMENTS[0], date: new Date(y + 1, EVENEMENTS[0].m - 1, EVENEMENTS[0].d) }
+  );
+}
+
 function Conseiller() {
   const C = useTheme();
-  const input = inputStyle(C);
+  const ev = prochainEvenement();
+  const evJour = ev.date.getDate();
+  const evMois = ev.date.toLocaleDateString("fr-FR", { month: "short" }).replace(".", "").toUpperCase();
+  const evDate = ev.date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <Card style={{ textAlign: "center", padding: 28 }}>
-        <div style={{ margin: "0 auto 16px", display: "inline-flex" }}><Logo size={72} radius={16} /></div>
-        <div style={{ color: C.ivory, fontSize: 19, fontWeight: 600 }}>{CABINET.name}</div>
+        <div style={{ margin: "0 auto 16px", display: "inline-flex", background: "#fff", borderRadius: 14, padding: "14px 18px" }}>
+          <img src="/logo-hexa.jpeg" alt="Hexa Patrimoine" style={{ height: 54, width: "auto", display: "block" }} />
+        </div>
+        <div style={{ color: C.ivory, fontSize: 19, fontWeight: 600 }}>Hexa Patrimoine — Julien DANIEL</div>
         <div style={{ color: C.brass, fontSize: 13, marginTop: 3 }}>Conseil en gestion de patrimoine</div>
         <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 6 }}>CIF · membre ANACOFI · ORIAS n° 26004342</div>
         <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
@@ -800,15 +826,15 @@ function Conseiller() {
         <div style={{ color: C.ivorySoft, fontSize: 13, marginTop: 16 }}>{CABINET.telDisplay}</div>
       </Card>
       <Card>
-        <Eyebrow>Prochain rendez-vous</Eyebrow>
+        <Eyebrow>Prochain événement</Eyebrow>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ textAlign: "center", background: C.ink, borderRadius: 12, padding: "10px 14px", border: `1px solid ${C.line}` }}>
-            <div style={{ color: C.brass, fontSize: 22, fontWeight: 600, lineHeight: 1 }}>24</div>
-            <div style={{ color: C.ivorySoft, fontSize: 11, marginTop: 2 }}>JUIN</div>
+          <div style={{ textAlign: "center", background: C.ink, borderRadius: 12, padding: "10px 14px", border: `1px solid ${C.line}`, minWidth: 56 }}>
+            <div style={{ color: C.brass, fontSize: 22, fontWeight: 600, lineHeight: 1 }}>{evJour}</div>
+            <div style={{ color: C.ivorySoft, fontSize: 11, marginTop: 2 }}>{evMois}</div>
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ color: C.ivory, fontSize: 14, fontWeight: 500 }}>Revue annuelle de patrimoine</div>
-            <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 2 }}>14 h 30 · visioconférence</div>
+            <div style={{ color: C.ivory, fontSize: 14, fontWeight: 500 }}>{ev.label}</div>
+            <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 2 }}>{evDate} · conférence</div>
           </div>
           <ChevronRight size={18} color={C.ivorySoft} />
         </div>
@@ -912,7 +938,7 @@ export const CLIENT_TABS = [
   { id: "budget", label: "Budget", icon: PiggyBank },
   { id: "tri", label: "TRI", icon: Calculator },
   { id: "analyse", label: "Analyse", icon: Shield },
-  { id: "conseiller", label: "Conseiller", icon: Phone },
+  { id: "conseiller", label: "Expert", icon: Phone },
   { id: "donnees", label: "Données", icon: Lock },
 ];
 
