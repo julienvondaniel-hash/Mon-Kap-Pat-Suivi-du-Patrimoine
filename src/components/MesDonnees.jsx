@@ -3,6 +3,7 @@ import { Download, Trash2, Shield, AlertTriangle, Check } from "lucide-react";
 import { exportMyData, eraseMyData, signOut } from "../lib/data";
 import Hex from "./Hex.jsx";
 import { useTheme } from "../lib/theme.jsx";
+import LegalOverlay, { LEGAL_DOCS } from "./Legal.jsx";
 
 const CABINET = { name: "Mon Kap Pat", dpoEmail: "j.daniel@hexa-patrimoine.com" };
 
@@ -25,6 +26,7 @@ export default function MesDonnees() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [confirmErase, setConfirmErase] = useState(false);
+  const [legal, setLegal] = useState(null); // document légal affiché en overlay (ou null)
 
   async function handleExport() {
     setBusy(true); setMsg("");
@@ -126,6 +128,18 @@ export default function MesDonnees() {
         La suppression complète du compte d'accès est traitée par nos services
         sous 30 jours.
       </div>
+
+      {/* Documents légaux */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", padding: "4px 4px 0" }}>
+        {LEGAL_DOCS.map((d) => (
+          <button key={d.id} type="button" onClick={() => setLegal(d.id)}
+            style={{ background: "none", border: "none", color: C.brass, fontSize: 12, cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+            {d.label}
+          </button>
+        ))}
+      </div>
+
+      {legal && <LegalOverlay initialDoc={legal} onClose={() => setLegal(null)} />}
     </div>
   );
 }

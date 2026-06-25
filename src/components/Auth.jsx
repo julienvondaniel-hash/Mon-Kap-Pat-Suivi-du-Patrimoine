@@ -4,6 +4,7 @@ import { Eye, EyeOff, Lock, Shield, Check, Mail, KeyRound, ArrowLeft } from "luc
 import { signIn, signUp, recordSignupConsents, resendConfirmation, requestPasswordReset, updatePassword } from "../lib/data";
 import { isConfigured } from "../lib/supabase";
 import { useTheme } from "../lib/theme.jsx";
+import LegalOverlay, { LEGAL_DOCS } from "./Legal.jsx";
 const inputStyle = (C) => ({ background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", color: C.ivory, fontSize: 14, width: "100%", boxSizing: "border-box" });
 
 const CABINET = { name: "Mon Kap Pat" };
@@ -95,6 +96,7 @@ export default function Auth({ initialView = "login", onResetDone }) {
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
+  const [legal, setLegal] = useState(null); // document légal affiché en overlay (ou null)
   const [f, setF] = useState({
     civilite: "M.", prenom: "", nom: "", email: "", telephone: "",
     naissance: "", residenceFiscale: "France", password: "",
@@ -362,6 +364,10 @@ export default function Auth({ initialView = "login", onResetDone }) {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 6, paddingTop: 16, borderTop: `1px solid ${C.line}` }}>
               <Checkbox checked={f.cgu} onToggle={() => set("cgu", !f.cgu)}>J'accepte les conditions générales d'utilisation et la politique de confidentialité.</Checkbox>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 14px", paddingLeft: 30, marginTop: -8 }}>
+                <button type="button" onClick={() => setLegal("cgu")} style={{ background: "none", border: "none", color: C.brass, fontSize: 12, cursor: "pointer", padding: 0, textDecoration: "underline" }}>Lire les CGU</button>
+                <button type="button" onClick={() => setLegal("confidentialite")} style={{ background: "none", border: "none", color: C.brass, fontSize: 12, cursor: "pointer", padding: 0, textDecoration: "underline" }}>Politique de confidentialité</button>
+              </div>
               <Checkbox checked={f.consentData} onToggle={() => set("consentData", !f.consentData)}>Je consens à ce que {CABINET.name} collecte et traite mes données personnelles et patrimoniales aux fins de suivi de mon patrimoine. <span style={{ color: C.ivory }}>(obligatoire)</span></Checkbox>
               <Checkbox checked={f.consentMarketing} onToggle={() => set("consentMarketing", !f.consentMarketing)}>J'accepte d'être recontacté(e) par un conseiller à des fins commerciales. <span style={{ color: C.brass }}>(facultatif)</span></Checkbox>
             </div>
@@ -378,7 +384,19 @@ export default function Auth({ initialView = "login", onResetDone }) {
         )}
         </>
         )}
+
+        {/* Pied de page : accès permanent aux documents légaux (y compris avant inscription). */}
+        <div style={{ marginTop: 24, paddingTop: 16, borderTop: `1px solid ${C.line}`, display: "flex", flexWrap: "wrap", gap: "4px 14px", justifyContent: "center" }}>
+          {LEGAL_DOCS.map((d) => (
+            <button key={d.id} type="button" onClick={() => setLegal(d.id)}
+              style={{ background: "none", border: "none", color: C.ivorySoft, fontSize: 11.5, cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+              {d.label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {legal && <LegalOverlay initialDoc={legal} onClose={() => setLegal(null)} />}
     </div>
   );
 }
