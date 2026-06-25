@@ -68,7 +68,7 @@ function Shell({ isDesktop, isAdvisor, prenom, view, setView, tab, setTab, mode,
         <aside style={{ width: 256, flexShrink: 0, background: C.navy, borderRight: `1px solid ${C.navyLine}`, display: "flex", flexDirection: "column", padding: "26px 16px", boxSizing: "border-box", position: "sticky", top: 0, height: "100vh", color: C.onNavy }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "0 8px 22px" }}>
             <Logo size={34} radius={9} />
-            <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "0.01em", lineHeight: 1.15 }}>Hexa<br />Patrimoine</div>
+            <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "0.01em", lineHeight: 1.15 }}>Mon Kap<br />Pat</div>
           </div>
 
           {isAdvisor && (
@@ -124,7 +124,7 @@ function Shell({ isDesktop, isAdvisor, prenom, view, setView, tab, setTab, mode,
           <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
             <Logo size={30} radius={8} />
             <div>
-              <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "0.02em", lineHeight: 1.1 }}>Hexa Patrimoine</div>
+              <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "0.02em", lineHeight: 1.1 }}>Mon Kap Pat</div>
               <div style={{ fontSize: 11, marginTop: 1, opacity: .65 }}>
                 {isAdvisor ? (view === "backoffice" ? "Back-office cabinet" : "Vue client") : `Bonjour ${prenom}`}
               </div>
