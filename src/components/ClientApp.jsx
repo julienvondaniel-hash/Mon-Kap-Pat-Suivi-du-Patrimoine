@@ -419,7 +419,8 @@ function Actifs({ assets, onSave, onRemove }) {
   const C = useTheme();
   const input = inputStyle(C);
   const [editing, setEditing] = useState(null);
-  const blank = () => ({ id: null, type: "mobilier", category: "Actions", label: "", value: 0, debt: 0 });
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const blank = () => ({ id: null, type: "mobilier", category: "Actions", label: "", value: 0, debt: 0, valuedAt: todayISO });
   const save = async (a) => {
     // Mappe le modèle UI vers les colonnes de la base (kind/value/debt).
     await onSave({
@@ -429,6 +430,7 @@ function Actifs({ assets, onSave, onRemove }) {
       label: a.label,
       value: a.value,
       debt: a.debt || 0,
+      valuedAt: a.valuedAt || todayISO,
     });
     setEditing(null);
   };
@@ -451,7 +453,7 @@ function Actifs({ assets, onSave, onRemove }) {
             <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, background: C.ink, borderRadius: 12, padding: "12px 14px", border: `1px solid ${C.line}` }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ color: C.ivory, fontSize: 14, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.label || a.category}</div>
-                <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 2 }}>{a.category}{a.debt > 0 ? ` · dette ${fmt(a.debt)}` : ""}</div>
+                <div style={{ color: C.ivorySoft, fontSize: 12, marginTop: 2 }}>{a.category}{a.valuedAt ? ` · au ${new Date(a.valuedAt).toLocaleDateString("fr-FR")}` : ""}{a.debt > 0 ? ` · dette ${fmt(a.debt)}` : ""}</div>
               </div>
               <div style={{ color: C.ivory, fontSize: 14, fontWeight: 600 }}>{fmt(a.value)}</div>
               <button onClick={() => setEditing(a)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}><Pencil size={15} color={C.ivorySoft} /></button>
@@ -481,6 +483,7 @@ function AssetForm({ asset, onSave, onCancel }) {
   const input = inputStyle(C);
   const [a, setA] = useState(asset);
   const isImmo = a.type === "immobilier";
+  const today = new Date().toISOString().slice(0, 10);
   const set = (k, v) => setA((p) => ({ ...p, [k]: v }));
   const setType = (t) => setA((p) => ({ ...p, type: t, category: CATEGORIES[t][0].key }));
   return (
@@ -519,6 +522,10 @@ function AssetForm({ asset, onSave, onCancel }) {
                 <input type="number" value={a.debt || ""} onChange={(e) => set("debt", parseFloat(e.target.value) || 0)} style={input} />
               </div>
             )}
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: C.ivorySoft, display: "block", marginBottom: 6 }}>Date de valorisation</label>
+            <input type="date" max={today} value={a.valuedAt || today} onChange={(e) => set("valuedAt", e.target.value)} style={{ ...input, colorScheme: "dark" }} />
           </div>
           <button onClick={() => onSave(a)} disabled={!a.value}
             style={{ marginTop: 4, width: "100%", background: a.value ? C.brass : C.line, color: a.value ? C.ink : C.ivorySoft, border: "none", borderRadius: 12, padding: "14px", fontSize: 15, fontWeight: 600, cursor: a.value ? "pointer" : "default" }}>Enregistrer</button>
@@ -913,6 +920,7 @@ export const CLIENT_TABS = [
 const fromDb = (row) => ({
   id: row.id, type: row.kind, category: row.category,
   label: row.label, value: Number(row.value), debt: Number(row.debt),
+  valuedAt: row.valued_at || null,
 });
 
 // `tab` et `setTab` sont fournis par App (navigation partagée avec le menu
