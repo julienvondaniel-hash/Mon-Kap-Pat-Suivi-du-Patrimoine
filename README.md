@@ -23,6 +23,11 @@ Stack : React + Vite (front) · Supabase (auth + PostgreSQL en UE) · PWA instal
 5. Dans **Authentication > Providers**, garder *Email* activé. Pour la sécurité, activer
    la **2FA (MFA)** dans **Authentication > Settings**.
 
+> **Base déjà créée ?** Exécutez les migrations du dossier `supabase/` qui ne sont pas
+> encore appliquées, notamment `migration-historique.sql` (table `net_worth_snapshots`)
+> qui alimente la **courbe de progression du patrimoine**. Sans cette table, l'app
+> fonctionne mais la courbe se limite au point du jour.
+
 ## 3. Récupérer les clés
 
 Dans **Project Settings > API**, copier :

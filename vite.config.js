@@ -8,15 +8,18 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       manifest: {
-        name: "Hexa Patrimoine",
-        short_name: "Hexa",
-        description: "Espace patrimonial",
+        lang: "fr",
+        name: "Mon Kap Pat",
+        short_name: "Mon Kap Pat",
+        description: "Suivez votre patrimoine et visualisez sa progression",
         theme_color: "#1B2B4B",
         background_color: "#0A1226",
         display: "standalone",
         icons: [
-          { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/icon-512.png", sizes: "512x512", type: "image/png" }
+          { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: "/icon.svg", sizes: "any", type: "image/svg+xml" }
         ]
       }
     })
