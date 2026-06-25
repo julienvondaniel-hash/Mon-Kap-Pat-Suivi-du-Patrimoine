@@ -110,4 +110,6 @@ seine-gestion/
 ```
 
 Voir `docs/SECURITE-RGPD.md` pour les obligations avant toute mise en production
-avec des données client réelles.
+avec des données client réelles, et `docs/MISE-EN-PRODUCTION.md` pour ouvrir le
+service à des particuliers (pages légales, SMTP, captcha, domaine, durcissement
+Supabase, checklist de lancement).
