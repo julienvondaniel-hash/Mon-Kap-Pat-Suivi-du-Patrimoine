@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import Logo from "./Logo.jsx";
-import { Eye, EyeOff, Lock, Shield, Check, Mail } from "lucide-react";
-import { signIn, signUp, recordSignupConsents, resendConfirmation } from "../lib/data";
+import { Eye, EyeOff, Lock, Shield, Check, Mail, KeyRound, ArrowLeft } from "lucide-react";
+import { signIn, signUp, recordSignupConsents, resendConfirmation, requestPasswordReset, updatePassword } from "../lib/data";
 import { isConfigured } from "../lib/supabase";
 import { useTheme } from "../lib/theme.jsx";
 const inputStyle = (C) => ({ background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px 12px", color: C.ivory, fontSize: 14, width: "100%", boxSizing: "border-box" });
@@ -51,13 +51,13 @@ function Tab({ id, view, setView, setErr, setInfo, label }) {
   );
 }
 
-function PwdField({ value, onChange, show, setShow, showStrength }) {
+function PwdField({ value, onChange, show, setShow, showStrength, label = "Mot de passe" }) {
   const C = useTheme();
   const input = inputStyle(C);
   const fieldLbl = fieldLblStyle(C);
   return (
     <div>
-      <label style={fieldLbl}>Mot de passe</label>
+      <label style={fieldLbl}>{label}</label>
       <div style={{ position: "relative" }}>
         <input type={show ? "text" : "password"} value={value} onChange={(e) => onChange(e.target.value)}
           placeholder={showStrength ? "12 caractères minimum" : "••••••••••••"} style={{ ...input, paddingRight: 42 }} />
@@ -84,12 +84,14 @@ function Checkbox({ checked, onToggle, children }) {
   );
 }
 
-export default function Auth() {
+export default function Auth({ initialView = "login", onResetDone }) {
   const C = useTheme();
   const input = inputStyle(C);
   const fieldLbl = fieldLblStyle(C);
-  const [view, setView] = useState("login");
+  const [view, setView] = useState(initialView);
   const [show, setShow] = useState(false);
+  const [show2, setShow2] = useState(false);
+  const [pwd2, setPwd2] = useState("");
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -107,6 +109,27 @@ export default function Auth() {
     setBusy(false);
     if (error) setErr(error.message === "Invalid login credentials" ? "Identifiants incorrects." : error.message);
     // En cas de succès, onAuthChange (dans App) bascule automatiquement vers l'app.
+  }
+
+  // Demande d'un lien de réinitialisation (écran « mot de passe oublié »).
+  async function submitForgot() {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) return setErr("Adresse e-mail invalide.");
+    setBusy(true); setErr("");
+    const { error } = await requestPasswordReset(f.email);
+    setBusy(false);
+    if (error) return setErr(error.message);
+    setView("forgot-sent");
+  }
+
+  // Définition du nouveau mot de passe après clic sur le lien reçu par e-mail.
+  async function submitReset() {
+    if (f.password.length < 12) return setErr("Le mot de passe doit comporter au moins 12 caractères.");
+    if (f.password !== pwd2) return setErr("Les deux mots de passe ne correspondent pas.");
+    setBusy(true); setErr("");
+    const { error } = await updatePassword(f.password);
+    setBusy(false);
+    if (error) return setErr(error.message);
+    setView("reset-done");
   }
 
   async function submitSignup() {
@@ -188,6 +211,86 @@ export default function Auth() {
               Modifier mon adresse e-mail
             </button>
           </div>
+        ) : view === "forgot" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 8 }}>
+            <button type="button" onClick={() => { setView("login"); setErr(""); }} style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.ivorySoft, fontSize: 13, cursor: "pointer", padding: 0 }}>
+              <ArrowLeft size={15} /> Retour à la connexion
+            </button>
+            <div>
+              <div style={{ color: C.ivory, fontSize: 18, fontWeight: 600 }}>Mot de passe oublié</div>
+              <div style={{ color: C.ivorySoft, fontSize: 14, marginTop: 8, lineHeight: 1.55 }}>
+                Indiquez l'adresse e-mail de votre compte. Nous vous enverrons un lien sécurisé pour définir un nouveau mot de passe.
+              </div>
+            </div>
+            <div>
+              <label style={fieldLbl}>E-mail</label>
+              <input type="email" value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="vous@exemple.fr" style={input} />
+            </div>
+            {err && <div style={{ color: C.alert, fontSize: 13, background: "rgba(194,85,63,0.1)", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.alert}40` }}>{err}</div>}
+            <button onClick={submitForgot} disabled={busy} style={{ background: C.brass, color: C.ink, border: "none", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 600, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <Mail size={16} /> {busy ? "Envoi…" : "Envoyer le lien"}
+            </button>
+          </div>
+        ) : view === "forgot-sent" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 18, textAlign: "center", marginTop: 8 }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(62,140,156,0.14)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
+              <Mail size={26} color={C.brass} />
+            </div>
+            <div>
+              <div style={{ color: C.ivory, fontSize: 18, fontWeight: 600 }}>Vérifiez votre boîte mail</div>
+              <div style={{ color: C.ivorySoft, fontSize: 14, marginTop: 8, lineHeight: 1.55 }}>
+                Si un compte est associé à<br />
+                <span style={{ color: C.ivory, fontWeight: 600 }}>{f.email}</span>, vous recevrez un e-mail contenant un lien pour réinitialiser votre mot de passe.
+              </div>
+            </div>
+            <div style={{ background: C.inkSoft, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16, textAlign: "left", fontSize: 13, color: C.ivorySoft, lineHeight: 1.6 }}>
+              Le lien est valable une heure. Pensez à vérifier vos courriers indésirables (spam) si vous ne le trouvez pas.
+            </div>
+            <button onClick={() => { setView("login"); setErr(""); }} style={{ background: C.brass, color: C.ink, border: "none", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
+              Retour à la connexion
+            </button>
+          </div>
+        ) : view === "reset" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 8 }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(62,140,156,0.14)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
+              <KeyRound size={24} color={C.brass} />
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ color: C.ivory, fontSize: 18, fontWeight: 600 }}>Nouveau mot de passe</div>
+              <div style={{ color: C.ivorySoft, fontSize: 14, marginTop: 8, lineHeight: 1.55 }}>
+                Choisissez un nouveau mot de passe pour sécuriser votre espace.
+              </div>
+            </div>
+            <PwdField value={f.password} onChange={(v) => set("password", v)} show={show} setShow={setShow} showStrength={true} label="Nouveau mot de passe" />
+            <div>
+              <label style={fieldLbl}>Confirmer le mot de passe</label>
+              <div style={{ position: "relative" }}>
+                <input type={show2 ? "text" : "password"} value={pwd2} onChange={(e) => { setPwd2(e.target.value); setErr(""); }} placeholder="••••••••••••" style={{ ...input, paddingRight: 42 }} />
+                <button type="button" onClick={() => setShow2((s) => !s)} style={{ position: "absolute", right: 10, top: 10, background: "none", border: "none", cursor: "pointer", padding: 2 }}>
+                  {show2 ? <EyeOff size={17} color={C.ivorySoft} /> : <Eye size={17} color={C.ivorySoft} />}
+                </button>
+              </div>
+            </div>
+            {err && <div style={{ color: C.alert, fontSize: 13, background: "rgba(194,85,63,0.1)", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.alert}40` }}>{err}</div>}
+            <button onClick={submitReset} disabled={busy} style={{ background: C.brass, color: C.ink, border: "none", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 600, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <Lock size={16} /> {busy ? "Enregistrement…" : "Mettre à jour le mot de passe"}
+            </button>
+          </div>
+        ) : view === "reset-done" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 18, textAlign: "center", marginTop: 8 }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(127,166,124,0.14)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto" }}>
+              <Check size={28} color={C.positive} strokeWidth={2.5} />
+            </div>
+            <div>
+              <div style={{ color: C.ivory, fontSize: 18, fontWeight: 600 }}>Mot de passe mis à jour</div>
+              <div style={{ color: C.ivorySoft, fontSize: 14, marginTop: 8, lineHeight: 1.55 }}>
+                Votre mot de passe a été modifié avec succès.
+              </div>
+            </div>
+            <button onClick={() => { if (onResetDone) onResetDone(); else setView("login"); }} style={{ background: C.brass, color: C.ink, border: "none", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
+              Accéder à mon espace
+            </button>
+          </div>
         ) : (
         <>
         <div style={{ display: "flex", gap: 6, background: C.inkSoft, padding: 4, borderRadius: 12, border: `1px solid ${C.line}`, marginBottom: 22 }}>
@@ -204,6 +307,10 @@ export default function Auth() {
               <input type="email" value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="vous@exemple.fr" style={input} />
             </div>
             <PwdField value={f.password} onChange={(v) => set("password", v)} show={show} setShow={setShow} showStrength={false} />
+            <button type="button" onClick={() => { setView("forgot"); setErr(""); setInfo(""); }}
+              style={{ alignSelf: "flex-end", marginTop: -6, background: "none", border: "none", color: C.brass, fontSize: 12.5, cursor: "pointer", padding: 0 }}>
+              Mot de passe oublié ?
+            </button>
             {err && <div style={{ color: C.alert, fontSize: 13, background: "rgba(194,85,63,0.1)", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.alert}40` }}>{err}</div>}
             <button onClick={submitLogin} disabled={busy} style={{ background: C.brass, color: C.ink, border: "none", borderRadius: 12, padding: "15px", fontSize: 15, fontWeight: 600, cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               <Lock size={16} /> {busy ? "Connexion…" : "Se connecter"}
