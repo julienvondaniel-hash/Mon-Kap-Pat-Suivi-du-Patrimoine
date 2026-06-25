@@ -8,7 +8,7 @@ import {
   Calculator, ChevronRight, Shield, Droplet, Layers, Wallet,
   Plus, Trash2, X, Pencil, Lock, PiggyBank,
 } from "lucide-react";
-import { listAssets, upsertAsset, deleteAsset, saveSciSimulation, recordNetWorthSnapshot, listNetWorthHistory } from "../lib/data";
+import { listAssets, upsertAsset, deleteAsset, saveSciSimulation, recordNetWorthSnapshot, listNetWorthHistory, deleteNetWorthSnapshot } from "../lib/data";
 import MesDonnees from "./MesDonnees.jsx";
 import Logo from "./Logo.jsx";
 import Hex from "./Hex.jsx";
@@ -250,11 +250,25 @@ function Card({ children, style }) {
 /* ------------------------------------------------------------------ */
 /*  Écran Patrimoine                                                   */
 /* ------------------------------------------------------------------ */
-function Patrimoine({ assets, wide = false, history = [] }) {
+function Patrimoine({ assets, wide = false, history = [], onAddSnapshot, onDeleteSnapshot }) {
   const C = useTheme();
   const input = inputStyle(C);
   const { gross, net } = analyse(assets);
   const debt = assets.reduce((s, a) => s + (a.debt || 0), 0);
+
+  // Saisie d'un relevé daté de la valeur nette (suivi dans le temps).
+  const today = new Date().toISOString().slice(0, 10);
+  const [adding, setAdding] = useState(false);
+  const [snapDate, setSnapDate] = useState(today);
+  const [snapVal, setSnapVal] = useState("");
+  const [snapBusy, setSnapBusy] = useState(false);
+  const openAdd = () => { setSnapDate(today); setSnapVal(String(Math.round(net))); setAdding(true); };
+  const submitSnap = async () => {
+    if (!snapDate || snapVal === "") return;
+    setSnapBusy(true);
+    await onAddSnapshot?.(snapDate, Number(snapVal));
+    setSnapBusy(false); setAdding(false);
+  };
   const byCat = useMemo(() => {
     const m = {};
     assets.forEach((a) => { m[a.category] = (m[a.category] || 0) + a.value; });
@@ -344,6 +358,56 @@ function Patrimoine({ assets, wide = false, history = [] }) {
           <div style={{ fontSize: 18, color: C.ivory, fontWeight: 600, marginTop: 2 }}>{fmt(imm)}</div>
         </Card>
       </div>
+
+      {/* Suivi dans le temps : relevés datés de la valeur nette */}
+      <Card style={{ gridColumn: wide ? "1 / 3" : undefined }}>
+        <Eyebrow>Suivi dans le temps</Eyebrow>
+        <div style={{ fontSize: 12.5, color: C.ivorySoft, lineHeight: 1.55, marginBottom: 14 }}>
+          Enregistrez la valeur nette de votre patrimoine à une date donnée pour bâtir la
+          courbe — vous pouvez aussi saisir des relevés antérieurs. Le relevé du jour reflète
+          automatiquement vos actifs actuels.
+        </div>
+
+        {!adding ? (
+          <button onClick={openAdd}
+            style={{ width: "100%", background: "transparent", border: `1px dashed ${C.brassSoft}`, borderRadius: 10, padding: "11px", color: C.brass, fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <Plus size={15} /> Ajouter un relevé daté
+          </button>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, background: C.ink, border: `1px solid ${C.line}`, borderRadius: 12, padding: 14 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 130 }}>
+                <label style={{ fontSize: 12, color: C.ivorySoft, display: "block", marginBottom: 6 }}>Date du relevé</label>
+                <input type="date" max={today} value={snapDate} onChange={(e) => setSnapDate(e.target.value)} style={{ ...input, colorScheme: "dark" }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 130 }}>
+                <label style={{ fontSize: 12, color: C.ivorySoft, display: "block", marginBottom: 6 }}>Valeur nette (€)</label>
+                <input type="number" value={snapVal} onChange={(e) => setSnapVal(e.target.value)} style={input} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setAdding(false)} disabled={snapBusy}
+                style={{ flex: 1, background: "transparent", color: C.ivorySoft, border: `1px solid ${C.line}`, borderRadius: 10, padding: "11px", fontSize: 13, cursor: "pointer" }}>Annuler</button>
+              <button onClick={submitSnap} disabled={snapBusy || snapVal === ""}
+                style={{ flex: 1, background: C.brass, color: C.ink, border: "none", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 600, cursor: snapBusy ? "default" : "pointer", opacity: snapBusy || snapVal === "" ? 0.6 : 1 }}>{snapBusy ? "Enregistrement…" : "Enregistrer"}</button>
+            </div>
+          </div>
+        )}
+
+        {history.length > 0 && (
+          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+            {history.slice().reverse().map((h) => (
+              <div key={h.date} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, borderBottom: `1px solid ${C.line}`, paddingBottom: 8 }}>
+                <span style={{ color: C.ivorySoft, flex: 1 }}>{new Date(h.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</span>
+                <span style={{ color: C.ivory, fontWeight: 600 }}>{fmt(h.v)}</span>
+                <button onClick={() => onDeleteSnapshot?.(h.date)} title="Supprimer ce relevé" style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
+                  <Trash2 size={14} color={C.alert} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
@@ -858,6 +922,20 @@ export default function ClientApp({ tab = "patrimoine", setTab = () => {}, isDes
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Recharge l'historique des relevés datés (net_worth_snapshots) → courbe.
+  const reloadHistory = async () => {
+    const { data } = await listNetWorthHistory();
+    setHistory(
+      data && data.length
+        ? data.map((r) => ({
+            m: new Date(r.captured_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }),
+            v: Number(r.net_worth),
+            date: r.captured_at,
+          }))
+        : []
+    );
+  };
+
   // Enregistre le relevé daté du jour (valeur nette) puis recharge l'historique,
   // pour que l'onglet Patrimoine affiche la progression réelle dans le temps.
   const syncHistory = async (mapped) => {
@@ -867,16 +945,7 @@ export default function ClientApp({ tab = "patrimoine", setTab = () => {}, isDes
     if (mapped.length > 0) {
       await recordNetWorthSnapshot({ net: gross - debt, gross, debt });
     }
-    const { data } = await listNetWorthHistory();
-    if (data && data.length) {
-      setHistory(data.map((r) => ({
-        m: new Date(r.captured_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }),
-        v: Number(r.net_worth),
-        date: r.captured_at,
-      })));
-    } else {
-      setHistory([]);
-    }
+    await reloadHistory();
   };
 
   const refresh = async () => {
@@ -901,6 +970,17 @@ export default function ClientApp({ tab = "patrimoine", setTab = () => {}, isDes
     await refresh();
   };
 
+  // Relevés datés : ajout / suppression manuelle d'un point de la courbe, pour
+  // construire un suivi dans le temps (y compris des valeurs antérieures).
+  const addSnapshot = async (capturedAt, net) => {
+    try { await recordNetWorthSnapshot({ net, gross: net, debt: 0, capturedAt }); await reloadHistory(); }
+    catch (_) { /* table d'historique indisponible côté Supabase */ }
+  };
+  const removeSnapshot = async (capturedAt) => {
+    try { await deleteNetWorthSnapshot(capturedAt); await reloadHistory(); }
+    catch (_) { /* ignore */ }
+  };
+
   // Sur ordinateur : contenu large, centré, sans barre d'onglets en bas.
   const contentPad = isDesktop ? "32px 40px 40px" : "20px 18px 96px";
   const contentMax = isDesktop ? 1100 : "none";
@@ -912,7 +992,7 @@ export default function ClientApp({ tab = "patrimoine", setTab = () => {}, isDes
           {loading && tab !== "tri" && tab !== "conseiller"
             ? <div style={{ color: "#9AA6BE", fontSize: 13, padding: 8 }}>Chargement de votre patrimoine…</div>
             : <>
-                {tab === "patrimoine" && <Patrimoine assets={assets} wide={isDesktop} history={history} />}
+                {tab === "patrimoine" && <Patrimoine assets={assets} wide={isDesktop} history={history} onAddSnapshot={addSnapshot} onDeleteSnapshot={removeSnapshot} />}
                 {tab === "actifs" && <Actifs assets={assets} onSave={handleSave} onRemove={handleRemove} />}
                 {tab === "budget" && <Budget />}
                 {tab === "tri" && <TRI />}

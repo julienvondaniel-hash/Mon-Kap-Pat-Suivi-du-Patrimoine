@@ -19,6 +19,8 @@ export const EDITEUR = {
   service: "Mon Kap Pat",
   raisonSociale: "Seine Gestion Privée",
   president: "Julien DANIEL",
+  siret: "999 826 191 00010",
+  rcs: "RCS Versailles 999 826 191",
   email: "julien_daniel@yahoo.fr",
   telephone: "06 58 80 36 30",
 };
@@ -61,7 +63,7 @@ function MentionsLegales() {
       <P>
         L'application « {EDITEUR.service} » est éditée par <Strong>{EDITEUR.raisonSociale}</Strong>,
         {" "}<Fill>forme juridique, ex. SAS / SASU</Fill> au capital de <Fill>montant</Fill> €,
-        immatriculée au RCS de <Fill>ville</Fill> sous le numéro <Fill>SIREN / SIRET</Fill>,
+        immatriculée sous le n° SIRET {EDITEUR.siret} ({EDITEUR.rcs}),
         dont le siège social est situé <Fill>adresse complète du siège</Fill>.
       </P>
       <UL>
