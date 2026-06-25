@@ -37,14 +37,33 @@ export async function resendConfirmation(email) {
   return await supabase.auth.resend({ type: "signup", email });
 }
 
+// Mot de passe oublié : envoie un e-mail contenant un lien sécurisé. Le clic
+// renvoie l'utilisateur sur l'application (redirectTo) où l'événement
+// PASSWORD_RECOVERY déclenche l'écran de définition d'un nouveau mot de passe.
+// NB : pour éviter l'énumération des comptes, Supabase renvoie un succès même
+// si l'adresse n'existe pas — le message affiché reste donc neutre.
+export async function requestPasswordReset(email) {
+  return await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin,
+  });
+}
+
+// Définit le nouveau mot de passe pour la session de récupération en cours
+// (ouverte par le lien reçu par e-mail).
+export async function updatePassword(password) {
+  return await supabase.auth.updateUser({ password });
+}
+
 export async function getSession() {
   const { data } = await supabase.auth.getSession();
   return data.session;
 }
 
-// Écoute les changements d'état (connexion/déconnexion/refresh).
+// Écoute les changements d'état (connexion/déconnexion/refresh/récupération).
+// On transmet l'événement ET la session : App s'en sert pour détecter
+// PASSWORD_RECOVERY et basculer sur l'écran de nouveau mot de passe.
 export function onAuthChange(callback) {
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => callback(session));
+  const { data } = supabase.auth.onAuthStateChange((event, session) => callback(event, session));
   return () => data.subscription.unsubscribe();
 }
 
