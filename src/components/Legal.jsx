@@ -18,10 +18,16 @@ import { useTheme } from "../lib/theme.jsx";
 export const EDITEUR = {
   service: "Mon Kap Pat",
   raisonSociale: "Seine Gestion Privée",
+  forme: "SASU",
+  capital: "1 000",
   president: "Julien DANIEL",
   siret: "999 826 191 00010",
   rcs: "RCS Versailles 999 826 191",
-  email: "julien_daniel@yahoo.fr",
+  siege: "44 rue Jean Mermoz, 78600 Maisons-Laffitte",
+  tva: "FR62999826191",
+  orias: "26004342",
+  carteT: "CPI78012026000000016",
+  email: "j.daniel@hexa-patrimoine.com",
   telephone: "06 58 80 36 30",
 };
 
@@ -31,7 +37,7 @@ export const LEGAL_DOCS = [
   { id: "cgu", label: "CGU", icon: ScrollText },
 ];
 
-const MAJ = "juin 2026"; // date de dernière mise à jour (à confirmer à la validation)
+const MAJ = "26 juin 2026"; // date de mise en ligne du document
 
 /* ----------------------------- petits blocs ----------------------------- */
 function H({ children }) {
@@ -62,14 +68,16 @@ function MentionsLegales() {
       <H>Éditeur du service</H>
       <P>
         L'application « {EDITEUR.service} » est éditée par <Strong>{EDITEUR.raisonSociale}</Strong>,
-        {" "}<Fill>forme juridique, ex. SAS / SASU</Fill> au capital de <Fill>montant</Fill> €,
+        {" "}{EDITEUR.forme} au capital de {EDITEUR.capital} €,
         immatriculée sous le n° SIRET {EDITEUR.siret} ({EDITEUR.rcs}),
-        dont le siège social est situé <Fill>adresse complète du siège</Fill>.
+        dont le siège social est situé {EDITEUR.siege}.
       </P>
       <UL>
         <li>Représentant légal : <Strong>M. {EDITEUR.president}</Strong>, Président.</li>
         <li>Contact : {EDITEUR.email} — {EDITEUR.telephone}.</li>
-        <li>N° de TVA intracommunautaire : <Fill>n° TVA</Fill>.</li>
+        <li>N° de TVA intracommunautaire : {EDITEUR.tva}.</li>
+        <li><Strong>Conseiller en investissements financiers (CIF)</Strong> et <Strong>intermédiaire en assurance (IAS)</Strong>, immatriculé à l'ORIAS (www.orias.fr) sous le n° {EDITEUR.orias}, membre de l'<Strong>ANACOFI-CIF</Strong> (association agréée par l'AMF).</li>
+        <li><Strong>Transactions immobilières</Strong> : carte professionnelle « T » n° {EDITEUR.carteT}, délivrée par la <Strong>CCI Versailles-Yvelines</Strong>.</li>
       </UL>
 
       <H>Directeur de la publication</H>
@@ -78,12 +86,13 @@ function MentionsLegales() {
       <H>Hébergement</H>
       <P>
         <Strong>Base de données et authentification</Strong> (où sont stockées les données
-        personnelles) : Supabase, hébergement dans une région de l'<Strong>Union européenne</Strong>.
-        {" "}<Fill>entité et adresse du sous-traitant, voir le DPA Supabase</Fill>.
+        personnelles) : <Strong>Supabase</Strong>, hébergement dans une région de l'<Strong>Union
+        européenne</Strong> (accord de traitement : supabase.com/legal/dpa).
       </P>
       <P>
-        <Strong>Diffusion de l'application</Strong> (fichiers de l'interface) :
-        {" "}<Fill>hébergeur front, ex. Vercel Inc. — adresse officielle</Fill>.
+        <Strong>Diffusion de l'application</Strong> (fichiers de l'interface) : <Strong>Vercel Inc.</Strong>
+        {" "}(États-Unis — vercel.com). L'application est accessible à l'adresse{" "}
+        <Strong>https://seine-gestion.vercel.app/</Strong>.
       </P>
 
       <H>Propriété intellectuelle</H>
@@ -95,9 +104,9 @@ function MentionsLegales() {
 
       <H>Médiateur de la consommation</H>
       <P>
-        Conformément aux articles L.611-1 et suivants du Code de la consommation, le consommateur
-        peut recourir gratuitement à un médiateur : <Fill>nom et coordonnées du médiateur de la
-        consommation (obligatoire si vente aux particuliers)</Fill>.
+        Le service étant <Strong>gratuit</Strong> et ne donnant lieu à aucune vente aux consommateurs, le
+        dispositif de médiation de la consommation (articles L.611-1 et suivants du Code de la consommation)
+        ne s'applique pas. Il sera mis en place si une offre payante destinée aux particuliers est proposée.
       </P>
 
       <H>Données personnelles</H>
@@ -114,11 +123,19 @@ function Confidentialite() {
     <>
       <H>1. Responsable du traitement</H>
       <P>
-        Le responsable du traitement est <Strong>{EDITEUR.raisonSociale}</Strong>, représentée par
-        {" "}<Strong>M. {EDITEUR.president}</Strong>, Président. Pour toute question relative à vos
-        données : {EDITEUR.email}.
+        Pour les <Strong>utilisateurs directs (particuliers)</Strong> — identité, coordonnées et données
+        patrimoniales qu'ils saisissent eux-mêmes — ainsi que pour le fonctionnement du service, le
+        responsable du traitement est <Strong>{EDITEUR.raisonSociale}</Strong>, représentée par
+        {" "}<Strong>M. {EDITEUR.president}</Strong>, Président — contact : {EDITEUR.email}.
       </P>
-      <P><Fill>Le cas échéant, coordonnées du Délégué à la protection des données (DPO)</Fill>.</P>
+      <P>
+        Lorsque le service est utilisé par une <Strong>agence partenaire</Strong> pour suivre le patrimoine
+        de ses propres clients, c'est l'<Strong>agence qui est responsable du traitement</Strong> des
+        données de ces clients ; {EDITEUR.raisonSociale} agit alors comme <Strong>sous-traitant</Strong>
+        (fournisseur technique) au sens de l'article 28 du RGPD. Un <Strong>accord de sous-traitance</Strong>
+        est conclu entre {EDITEUR.raisonSociale} et chaque agence partenaire.
+      </P>
+      <P>Délégué à la protection des données (DPO) : <Strong>M. {EDITEUR.president}</Strong> — {EDITEUR.email}.</P>
 
       <H>2. Données que nous traitons</H>
       <UL>
@@ -142,24 +159,25 @@ function Confidentialite() {
 
       <H>4. Durées de conservation</H>
       <UL>
-        <li>Données du compte et données patrimoniales : pendant toute la vie du compte, puis supprimées sous <Fill>délai, ex. 30 jours</Fill> après fermeture.</li>
-        <li>Journaux techniques : <Fill>durée, ex. 12 mois</Fill>.</li>
-        <li>Preuves de consentement : conservées à titre de preuve pendant <Fill>durée légale applicable</Fill>.</li>
+        <li>Données du compte et données patrimoniales : pendant toute la vie du compte, puis supprimées <Strong>6 mois</Strong> après sa fermeture.</li>
+        <li>Journaux techniques : <Strong>12 mois</Strong>.</li>
+        <li>Preuves de consentement : conservées <Strong>3 ans</Strong> à titre de preuve.</li>
       </UL>
 
       <H>5. Destinataires et sous-traitants</H>
       <P>
         Vos données sont accessibles à {EDITEUR.raisonSociale} et à ses sous-traitants techniques
-        strictement nécessaires au fonctionnement : hébergeur de la base (Supabase, UE), hébergeur de
-        diffusion et <Fill>prestataire d'envoi d'e-mails, ex. Resend / Brevo</Fill>. Nous
+        strictement nécessaires au fonctionnement : <Strong>Supabase</Strong> (base de données en UE et
+        envoi des e-mails du service) et <Strong>Vercel</Strong> (diffusion de l'application). Nous
         {" "}<Strong>ne vendons ni ne cédons jamais</Strong> vos données à des tiers à des fins publicitaires.
       </P>
 
       <H>6. Transferts hors Union européenne</H>
       <P>
-        Vos données sont hébergées dans l'Union européenne. Si un sous-traitant venait à les traiter
-        hors UE, ce transfert serait encadré par les <Strong>clauses contractuelles types</Strong> de
-        la Commission européenne ou un mécanisme équivalent. <Fill>à vérifier selon vos prestataires</Fill>.
+        Les données personnelles sont stockées chez <Strong>Supabase, en Union européenne</Strong>. La
+        diffusion de l'application est assurée par <Strong>Vercel</Strong> (société établie aux États-Unis),
+        qui n'héberge pas la base de données. Les éventuels transferts hors UE sont encadrés par les
+        {" "}<Strong>clauses contractuelles types</Strong> de la Commission européenne ou un mécanisme équivalent.
       </P>
 
       <H>7. Sécurité</H>
@@ -220,6 +238,10 @@ function CGU() {
         rendements (TRI) et indicateurs sont fournis à titre <Strong>purement informatif</Strong> et ne
         valent pas recommandation personnalisée. Vous restez seul responsable de vos décisions.
       </P>
+      <P>
+        Le service est destiné à des <Strong>agences partenaires et professionnels</Strong> qui l'utilisent
+        pour le suivi du patrimoine de leurs propres clients. L'accès est réservé aux comptes habilités.
+      </P>
 
       <H>3. Compte et accès</H>
       <UL>
@@ -228,10 +250,14 @@ function CGU() {
         <li>Le service est réservé aux personnes majeures capables de contracter.</li>
       </UL>
 
-      <H>4. Données saisies et exactitude</H>
+      <H>4. Données saisies — responsabilité de l'utilisateur</H>
       <P>
-        Vous demeurez responsable de l'exactitude des données que vous saisissez. {EDITEUR.raisonSociale}
-        ne garantit pas l'exactitude des résultats calculés à partir de données erronées ou incomplètes.
+        L'utilisateur (et, le cas échéant, l'agence partenaire) est <Strong>seul responsable des données
+        qu'il saisit</Strong> : leur exactitude, leur licéité, et le fait de disposer du droit et de la base
+        légale nécessaires pour les traiter — notamment l'information et, s'il y a lieu, le recueil du
+        consentement des personnes concernées (ses propres clients). {EDITEUR.raisonSociale}
+        {" "}<Strong>n'est pas responsable des données saisies par les utilisateurs</Strong>, ni des
+        résultats calculés à partir de données erronées ou incomplètes.
       </P>
 
       <H>5. Disponibilité et évolution</H>
@@ -243,8 +269,9 @@ function CGU() {
 
       <H>6. Tarifs</H>
       <P>
-        <Fill>Préciser le modèle : service gratuit, ou conditions tarifaires et modalités de paiement,
-        d'abonnement et de résiliation si payant (des CGV seront alors ajoutées)</Fill>.
+        Le service est <Strong>gratuit pour les particuliers</Strong> ; aucun paiement n'est demandé pour son
+        utilisation. {EDITEUR.raisonSociale} se réserve la possibilité de faire évoluer ce modèle ; toute
+        évolution serait portée à votre connaissance au préalable.
       </P>
 
       <H>7. Propriété intellectuelle</H>
@@ -256,8 +283,9 @@ function CGU() {
       <H>8. Responsabilité</H>
       <P>
         Dans les limites permises par la loi, la responsabilité de {EDITEUR.raisonSociale} ne saurait être
-        engagée pour les dommages indirects ni pour les conséquences de décisions prises sur la base des
-        informations affichées, celles-ci étant fournies à titre informatif.
+        engagée pour les dommages indirects, pour les conséquences de décisions prises sur la base des
+        informations affichées (fournies à titre informatif), ni pour <Strong>les données saisies par les
+        utilisateurs ou les agences partenaires</Strong>, dont ceux-ci conservent l'entière responsabilité.
       </P>
 
       <H>9. Données personnelles</H>
@@ -330,8 +358,8 @@ export default function LegalOverlay({ initialDoc = "mentions", onClose }) {
           <div style={{ display: "flex", gap: 9, alignItems: "flex-start", background: "rgba(62,140,156,0.12)", border: `1px solid ${C.warn}55`, borderRadius: 12, padding: "11px 13px", margin: "14px 0 4px" }}>
             <AlertTriangle size={16} color={C.warn} style={{ flexShrink: 0, marginTop: 1 }} />
             <div style={{ fontSize: 12, color: C.ivorySoft, lineHeight: 1.55 }}>
-              Document type à compléter (zones <span style={{ color: C.ivory }}>⟨entre chevrons⟩</span>) et à
-              faire valider par un juriste avant l'ouverture au public. Ce bandeau est à retirer ensuite.
+              Document renseigné à partir des informations fournies. À <span style={{ color: C.ivory }}>faire
+              valider par un juriste</span> avant l'ouverture au public ; ce bandeau pourra alors être retiré.
             </div>
           </div>
           <Body />
