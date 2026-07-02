@@ -304,10 +304,10 @@ function Patrimoine({ assets, wide = false, history = [], onAddSnapshot, onDelet
   // (net_worth_snapshots). Chaque relevé = un point de la courbe ; le dernier
   // correspond à aujourd'hui. Sans historique (1er jour ou table absente),
   // un seul point : la valeur d'aujourd'hui — aucune donnée passée inventée.
-  const moisCourt = new Date().toLocaleDateString("fr-FR", { month: "short" });
+  const anneeCourante = new Date().getFullYear().toString();
   const chart = history.length > 0
-    ? history.map((h) => ({ m: h.m, v: h.v }))
-    : [{ m: moisCourt, v: net }];
+    ? history.map((h) => ({ m: h.m, v: h.v, date: h.date }))
+    : [{ m: anneeCourante, v: net }];
 
   // Progression depuis le premier relevé (au moins deux points datés requis).
   const perf = history.length > 1 && history[0].v
@@ -334,9 +334,9 @@ function Patrimoine({ assets, wide = false, history = [], onAddSnapshot, onDelet
         <div style={{ height: wide ? 220 : 160, marginTop: 14, marginLeft: -10 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chart}>
-              <XAxis dataKey="m" tick={{ fill: C.ivorySoft, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="m" tick={{ fill: C.ivorySoft, fontSize: 11 }} axisLine={false} tickLine={false} minTickGap={28} interval="preserveStartEnd" />
               <YAxis hide domain={["dataMin - 50000", "dataMax + 50000"]} />
-              <Tooltip contentStyle={{ background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10 }} formatter={(v) => [fmt(v), "Valeur nette"]} labelStyle={{ color: C.brass }} />
+              <Tooltip contentStyle={{ background: C.ink, border: `1px solid ${C.line}`, borderRadius: 10 }} formatter={(v) => [fmt(v), "Valeur nette"]} labelStyle={{ color: C.brass }} labelFormatter={(label, payload) => { const d = payload && payload[0] && payload[0].payload && payload[0].payload.date; return d ? new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : label; }} />
               <Line type="monotone" dataKey="v" stroke={C.brass} strokeWidth={2.5} dot={{ r: 4, fill: C.brass }} />
             </LineChart>
           </ResponsiveContainer>
@@ -985,7 +985,7 @@ export default function ClientApp({ tab = "patrimoine", setTab = () => {}, isDes
     setHistory(
       data && data.length
         ? data.map((r) => ({
-            m: new Date(r.captured_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }),
+            m: new Date(r.captured_at).getFullYear().toString(),
             v: Number(r.net_worth),
             date: r.captured_at,
           }))
